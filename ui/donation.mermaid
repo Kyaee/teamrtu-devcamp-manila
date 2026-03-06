@@ -1,0 +1,36 @@
+flowchart LR
+
+    classDef startend fill:#1a1a1a,stroke:#1a1a1a,color:#fff,rx:20
+    classDef action   fill:#e8d5f5,stroke:#a855f7,color:#1a1a1a
+    classDef decision fill:#bfecff,stroke:#22aaee,color:#1a1a1a
+    classDef warning  fill:#fff3cd,stroke:#f0a500,color:#7a5000
+    classDef blocked  fill:#f8d7da,stroke:#dc3545,color:#7a0010
+
+    START([Tap Donate\nor Claim Relief]):::startend
+
+    START --> OTP[Enter Mobile Number\nReceive OTP via SMS]:::action
+
+    OTP --> OTP_CHECK{OTP\nCorrect?}:::decision
+    OTP_CHECK -- No --> RETRY[Resend OTP]:::warning
+    RETRY --> OTP
+    OTP_CHECK -- Yes --> ADDRESS[Enter Home Address\nand Barangay]:::action
+
+    ADDRESS --> FAMILY{Is this address\nalready registered?}:::decision
+
+    FAMILY -- Yes - join family --> LINK[Link to Existing\nFamily Record]:::action
+    FAMILY -- No - new address --> CREATE[Create New\nFamily Record\nYou are Household Head]:::action
+
+    LINK --> HUB{What do\nyou want to do?}:::decision
+    CREATE --> HUB
+
+    HUB -- Donate --> DONATE[Choose Amount\nand Relief Cause]:::action
+    HUB -- Claim relief --> CLAIM_CHECK{Has your family\nclaimed relief\nfor this event?}:::decision
+
+    DONATE --> PAY[Pay via GCash]:::action
+    PAY --> DONE_DONATE([Donation Confirmed\nReceipt Sent]):::startend
+
+    CLAIM_CHECK -- Yes already claimed --> BLOCKED[One Claim Per Family\nView Claim History]:::blocked
+    CLAIM_CHECK -- No not yet --> FORM[Fill Relief Form\nSelect Food - Medical\nShelter or Cash]:::action
+
+    FORM --> SUBMIT([Claim Registered\nPickup Details Sent]):::startend
+    BLOCKED --> END([Done]):::startend

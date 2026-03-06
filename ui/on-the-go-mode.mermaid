@@ -1,0 +1,79 @@
+
+flowchart TB
+
+%% ===== Styles =====
+classDef startend fill:#1a1a1a,stroke:#1a1a1a,color:#ffffff,rx:20
+classDef action fill:#e8d5f5,stroke:#a855f7,color:#1a1a1a
+classDef decision fill:#bfecff,stroke:#22aaee,color:#1a1a1a
+classDef data fill:#e6ffe6,stroke:#22aa44,color:#1a1a1a
+
+%% ===== Start =====
+START([Open AGOS App]):::startend
+PERM[Allow Location and Notifications]:::action
+NET{Internet Connection Available?}:::decision
+
+START --> PERM
+PERM --> NET
+
+%% =========================
+%% ===== ONLINE MODE ======
+%% =========================
+
+NET -- Yes --> HOME{Flood Alert in Your Area?}:::decision
+
+HOME -- No --> MAP[Browse Live Flood Map]:::action
+HOME -- Yes --> ALERT[View Alert and Severity Level]:::action
+
+MAP --> USER_ACTION{What do you want to do?}:::decision
+
+USER_ACTION -- Report Flood --> FLOOD_FORM[Submit Flood Depth Report]:::action
+USER_ACTION -- Report Clogged Drain --> TRASH_FORM[Upload Photo and Pin Location]:::action
+USER_ACTION -- Preparedness --> PREP[Open Preparedness Checklist]:::action
+
+FLOOD_FORM --> MAP_UPDATED([Report Submitted and Map Updated]):::startend
+TRASH_FORM --> MAP_UPDATED
+
+PREP --> CHECK[Tick Off Easy / Moderate / Complex Tasks]:::action
+CHECK --> BADGE([Preparedness Badge Earned]):::startend
+
+ALERT --> EVAC_DECISION{Should You Evacuate?}:::decision
+
+EVAC_DECISION -- Stay --> MONITOR[Monitor Flood Map Updates]:::action
+EVAC_DECISION -- Evacuate --> ROUTE[Generate Safe Route to Evacuation Center]:::action
+
+MONITOR --> HOME
+
+ROUTE --> NAV[Follow Navigation Avoiding Flooded Roads]:::action
+NAV --> ARRIVE([Arrive at Evacuation Center]):::startend
+
+ARRIVE --> POST{After Flood What Do You Need?}:::decision
+
+POST -- Find Facilities --> FACILITIES[View Nearby Hospitals Shelters Barangay Halls]:::action
+POST -- Donation or Relief --> DONATION([Proceed to Donation Flow]):::startend
+
+FACILITIES --> END([User Task Complete]):::startend
+
+%% =========================
+%% ===== OFFLINE MODE =====
+%% =========================
+
+NET -- No --> OFFLINE[Offline Mode Activated]:::action
+
+OFFLINE --> CACHE_MAP[View Cached Flood Map]:::data
+
+CACHE_MAP --> OFF_ACTION{Offline Actions Available}:::decision
+
+OFF_ACTION -- Report Flood --> OFF_FLOOD[Save Flood Report Locally]:::action
+OFF_ACTION -- Report Drain --> OFF_TRASH[Save Photo and Location Locally]:::action
+OFF_ACTION -- Preparedness --> PREP
+OFF_ACTION -- Evacuation Info --> OFF_EVAC[View Cached Evacuation Centers]:::data
+
+OFF_EVAC --> OFF_ROUTE[See Offline Directions to Nearest Safe Center]:::action
+
+OFF_FLOOD --> SYNC_NOTE[Report Stored Will Sync When Internet Returns]:::action
+OFF_TRASH --> SYNC_NOTE
+
+SYNC_NOTE --> WAIT_NET{Connection Restored?}:::decision
+
+WAIT_NET -- Yes --> MAP_UPDATED
+WAIT_NET -- No --> CACHE_MAP
