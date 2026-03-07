@@ -120,7 +120,7 @@ export function useCenters(userLat?: number, userLng?: number) {
 
       // Source 2: Supabase RPC (enrichment — may be null if no Supabase keys)
       try {
-        const rows = await fetchNearbyEvacCenters(userLat, userLng, 20);
+        const rows = await fetchNearbyEvacCenters(userLat, userLng, 5);
         for (const row of rows) {
           discovered.push(rowToDomain(row));
         }

@@ -19,9 +19,9 @@ import { useMapReports } from "@/src/features/map/use-map-reports";
 import { useUserLocation } from "@/src/features/map/use-user-location";
 import type {
   NavStatus,
-  useNavigationSession,
-  type FloodContext,
+  FloodContext,
 } from "@/src/features/navigation/use-navigation-session";
+import { useNavigationSession } from "@/src/features/navigation/use-navigation-session";
 import type { LatLng } from "@/src/services/maps";
 
 const STATUS_LABELS: Record<NavStatus, string> = {
@@ -38,7 +38,10 @@ export default function NavigateScreen() {
   const { centerId } = useLocalSearchParams<{ centerId: string }>();
   const { back } = useRouter();
   const { location } = useUserLocation();
-  const { centers } = useCenters(location.latitude, location.longitude);
+  const { centers, loading: centersLoading } = useCenters(
+    location.latitude,
+    location.longitude,
+  );
   const { floodReports } = useMapReports();
   const { highestSeverityAlert } = useAlerts(
     location.latitude,
@@ -137,6 +140,16 @@ export default function NavigateScreen() {
   const totalSteps = nav.route?.steps.length ?? 0;
 
   if (!targetCenter) {
+    if (centersLoading) {
+      return (
+        <SafeAreaView style={styles.container}>
+          <View style={styles.errorWrap}>
+            <ActivityIndicator size="large" color={tokens.colors.ctaPrimary} />
+            <Text style={styles.errorTitle}>Loading evacuation centers...</Text>
+          </View>
+        </SafeAreaView>
+      );
+    }
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorWrap}>

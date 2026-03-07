@@ -318,10 +318,21 @@ export default function HomeScreen() {
   ]);
 
   const routeOverlay = useMemo(() => {
-    const bestRoute = decision?.recommendedCenters[0]?.route;
-    if (!bestRoute) return null;
-    return { polyline: bestRoute.polyline, color: "#000000", width: 4 };
-  }, [decision]);
+    const best = decision?.recommendedCenters[0];
+    if (!best) return null;
+    if (best.route) {
+      return { polyline: best.route.polyline, color: "#000000", width: 4 };
+    }
+    // Fallback: straight dashed line from user to center when no route polyline
+    return {
+      polyline: [
+        { latitude: location.latitude, longitude: location.longitude },
+        { latitude: best.center.lat, longitude: best.center.lng },
+      ],
+      color: "#6B7280",
+      width: 3,
+    };
+  }, [decision, location.latitude, location.longitude]);
 
   const initialRegion = {
     latitude: location.latitude,
@@ -800,7 +811,7 @@ export default function HomeScreen() {
                         </Text>
                       </Pressable>
                     ))}
-                    {decision.recommendedCenters[0]?.route ? (
+                    {decision.recommendedCenters[0] ? (
                       <Pressable
                         style={styles.primaryButton}
                         onPress={() => {
@@ -813,7 +824,9 @@ export default function HomeScreen() {
                         }}
                       >
                         <Text style={styles.primaryButtonText}>
-                          Start Navigation
+                          {decision.recommendedCenters[0].route
+                            ? "Start Navigation"
+                            : `Navigate to ${decision.recommendedCenters[0].center.name}`}
                         </Text>
                       </Pressable>
                     ) : null}

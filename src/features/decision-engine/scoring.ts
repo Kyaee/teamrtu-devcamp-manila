@@ -129,8 +129,15 @@ export function scoreCenterReadiness(center: EvacCenter): {
   score: number;
   reason: string;
 } {
-  const statusScore = center.status === "open" ? 0 : 30;
-  const distancePenalty = Math.min(center.distanceKm * 10, 50);
+  const statusScore = center.status === "open" ? 0 : 15;
+  // Distance penalty scales steeply — nearby centers are strongly preferred.
+  // 0.5 km → 5, 1 km → 10, 2 km → 20, 3 km → 30, 5 km → 80, 10+ km → 95 (cap)
+  const distancePenalty = Math.min(
+    Math.round(
+      center.distanceKm * 10 + Math.max(0, center.distanceKm - 3) * 15,
+    ),
+    95,
+  );
 
   const score = statusScore + distancePenalty;
   const reason =

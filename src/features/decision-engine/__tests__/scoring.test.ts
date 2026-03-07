@@ -166,4 +166,13 @@ describe("scoreCenterReadiness", () => {
     const { score } = scoreCenterReadiness(center);
     expect(score).toBeGreaterThan(50);
   });
+
+  it("heavily penalizes very far centers", () => {
+    const nearby = makeCenter({ status: "open", distanceKm: 1 });
+    const farAway = makeCenter({ status: "open", distanceKm: 15 });
+    const { score: nearScore } = scoreCenterReadiness(nearby);
+    const { score: farScore } = scoreCenterReadiness(farAway);
+    // A 15km center should score dramatically worse than a 1km center
+    expect(farScore - nearScore).toBeGreaterThan(40);
+  });
 });
