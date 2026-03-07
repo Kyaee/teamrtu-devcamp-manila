@@ -4,6 +4,7 @@ import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { Screen } from "@/src/components/screen";
 import { tokens } from "@/src/design/tokens";
 import { useCenters } from "@/src/features/centers/use-centers";
+import { useUserLocation } from "@/src/features/map/use-user-location";
 
 const HOTLINE_SECTIONS: {
   heading: string;
@@ -55,7 +56,11 @@ const HOTLINE_SECTIONS: {
 ];
 
 export default function CentersScreen() {
-  const { centers, openOnly, setOpenOnly } = useCenters();
+  const { location } = useUserLocation();
+  const { centers, openOnly, setOpenOnly } = useCenters(
+    location.latitude,
+    location.longitude,
+  );
 
   return (
     <Screen>

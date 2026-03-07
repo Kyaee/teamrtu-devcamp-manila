@@ -10,7 +10,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { tokens } from "@/src/design/tokens";
-import { evacCenters } from "@/src/features/centers/data";
 import { useCenters } from "@/src/features/centers/use-centers";
 import type { MapDisplayRef, MapMarker } from "@/src/features/map/MapDisplay";
 import MapDisplay from "@/src/features/map/MapDisplay";
@@ -37,9 +36,7 @@ export default function NavigateScreen() {
   const mapRef = useRef<MapDisplayRef>(null);
 
   const targetCenter = useMemo(() => {
-    const fromRemote = centers.find((c) => c.id === centerId);
-    if (fromRemote) return fromRemote;
-    return evacCenters.find((c) => c.id === centerId) ?? null;
+    return centers.find((c) => c.id === centerId) ?? null;
   }, [centers, centerId]);
 
   const destination: LatLng | null = targetCenter

@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -15,6 +15,7 @@ import { AlertCard } from "@/src/features/alerts/alert-card";
 import { useAlerts } from "@/src/features/alerts/use-alerts";
 import { useWeatherSignal } from "@/src/features/alerts/use-weather-signal";
 import { useCenters } from "@/src/features/centers/use-centers";
+import { useGeminiCenter } from "@/src/features/centers/use-gemini-center";
 import type { GlobalAction } from "@/src/features/decision-engine/types";
 import { useEvacuationDecision } from "@/src/features/decision-engine/use-evacuation-decision";
 import { HomeFloatingPanel } from "@/src/features/home/HomeFloatingPanel";
@@ -129,8 +130,16 @@ export default function HomeScreen() {
     loading: weatherLoading,
   } = useWeatherSignal(location.latitude, location.longitude);
   const { highestSeverityAlert } = useAlerts();
-  const { floodReports, drainReports, addFloodReport } = useMapReports();
-  const { centers } = useCenters(location.latitude, location.longitude);
+  const { floodReports, drainReports } = useMapReports();
+  const { centers, loading: centersLoading } = useCenters(
+    location.latitude,
+    location.longitude,
+  );
+  const { choice: geminiChoice, loading: geminiLoading } = useGeminiCenter(
+    location.latitude,
+    location.longitude,
+    centers,
+  );
   const {
     decision,
     loading: decisionLoading,
@@ -571,26 +580,66 @@ export default function HomeScreen() {
             </Text>
           </View>
 
-          {/* Dire situation / Safe now toggle */}
-          {direActive ? (
-            <Pressable style={styles.safeButton} onPress={handleSafeNow}>
-              <Text style={styles.safeButtonText}>I&#39;m Safe Now</Text>
-            </Pressable>
-          ) : (
-            <Pressable
-              style={styles.direButton}
-              onPress={() => void handleDireSituation()}
-              disabled={direSending}
-            >
-              {direSending ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.direButtonText}>
-                  I&#39;m in a dire situation
+          {/* Gemini Nearest Center card */}
+          <View style={styles.card}>
+            <View style={styles.geminiHeader}>
+              <Text style={styles.cardTitle}>Pinakamalapit na Sentro</Text>
+              <View style={styles.aiBadge}>
+                <Text style={styles.aiBadgeText}>AI</Text>
+              </View>
+            </View>
+
+            {centersLoading || geminiLoading ? (
+              <View style={styles.geminiLoadingRow}>
+                <ActivityIndicator
+                  size="small"
+                  color={tokens.colors.ctaPrimary}
+                />
+                <Text style={styles.cardSub}>
+                  {centersLoading
+                    ? "Hinahanap ang mga sentro\u2026"
+                    : "Pinipili ng AI ang pinakamainam na sentro\u2026"}
                 </Text>
-              )}
-            </Pressable>
-          )}
+              </View>
+            ) : geminiChoice ? (
+              (() => {
+                const chosenCenter = centers.find(
+                  (c) => c.id === geminiChoice.centerId,
+                );
+                if (!chosenCenter) return null;
+                return (
+                  <View style={styles.geminiResult}>
+                    <Text style={styles.centerName}>{chosenCenter.name}</Text>
+                    <Text style={styles.centerMeta}>
+                      {chosenCenter.distanceKm.toFixed(1)} km ·{" "}
+                      {chosenCenter.status}
+                    </Text>
+                    <Text style={styles.geminiReason}>
+                      {geminiChoice.reason}
+                    </Text>
+                    {geminiChoice.isFallback ? null : (
+                      <View style={styles.aiSourceRow}>
+                        <Text style={styles.aiSourceText}>
+                          Pinili ng Gemini AI
+                        </Text>
+                      </View>
+                    )}
+                    <Link href={`/center/${chosenCenter.id}`} asChild>
+                      <Pressable style={styles.primaryButton}>
+                        <Text style={styles.primaryButtonText}>
+                          Tingnan ang Detalye at Ruta
+                        </Text>
+                      </Pressable>
+                    </Link>
+                  </View>
+                );
+              })()
+            ) : (
+              <Text style={styles.cardSub}>
+                I-grant ang lokasyon para mahanap ang pinakamalapit na sentro.
+              </Text>
+            )}
+          </View>
 
           {/* Evacuation Assessment card */}
           <View style={styles.card}>
@@ -996,5 +1045,44 @@ const styles = StyleSheet.create({
     color: tokens.colors.textDisabled,
     fontSize: 11,
     fontStyle: "italic",
+  },
+  geminiHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing.sm,
+  },
+  aiBadge: {
+    backgroundColor: tokens.colors.ctaPrimary,
+    borderRadius: tokens.radius.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  aiBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  geminiLoadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing.sm,
+  },
+  geminiResult: {
+    gap: tokens.spacing.xs,
+  },
+  geminiReason: {
+    color: tokens.colors.textSecondary,
+    fontSize: tokens.type.body,
+    fontStyle: "italic",
+    lineHeight: 20,
+  },
+  aiSourceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  aiSourceText: {
+    color: tokens.colors.ctaPrimary,
+    fontSize: 11,
+    fontWeight: "600",
   },
 });

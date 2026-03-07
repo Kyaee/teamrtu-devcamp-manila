@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -11,97 +11,82 @@ import {
 
 import { Screen } from "@/src/components/screen";
 import { tokens } from "@/src/design/tokens";
-import { evacCenters } from "@/src/features/centers/data";
+import { useCenters } from "@/src/features/centers/use-centers";
 import { useUserLocation } from "@/src/features/map/use-user-location";
 import { useConnectivity } from "@/src/features/offline/use-connectivity";
+import { getCenterGuidance } from "@/src/services/ai";
 import {
   getCachedRoute,
   getRouteGuidance,
   type RouteResult,
 } from "@/src/services/maps";
-import { supabase } from "@/src/services/supabase";
+import type { GeminiCenterGuidance } from "@/src/types/ai";
 import type { EvacCenter } from "@/src/types/domain";
 
 export default function CenterDetailScreen() {
   const params = useLocalSearchParams<{ id: string }>();
-  const [center, setCenter] = useState<EvacCenter>(
-    () => evacCenters.find((item) => item.id === params.id) ?? evacCenters[0],
-  );
-
-  useEffect(() => {
-    const load = async () => {
-      const mock = evacCenters.find((item) => item.id === params.id);
-      if (mock) {
-        setCenter(mock);
-        return;
-      }
-
-      if (supabase && params.id) {
-        try {
-          const { data, error } = await supabase
-            .from("evac_centers")
-            .select("*")
-            .eq("id", params.id)
-            .single();
-          if (!error && data) {
-            let lat = center.lat;
-            let lng = center.lng;
-            try {
-              const geo =
-                typeof data.location === "string"
-                  ? JSON.parse(data.location)
-                  : data.location;
-              if (geo?.coordinates) {
-                lng = geo.coordinates[0];
-                lat = geo.coordinates[1];
-              }
-            } catch {
-              /* use defaults */
-            }
-            setCenter({
-              id: data.id,
-              name: data.name,
-              barangay: data.barangay,
-              address: data.address,
-              lat,
-              lng,
-              distanceKm: 0,
-              status: data.status,
-              uncertaintyNote: data.uncertainty_note,
-            });
-          }
-        } catch {
-          /* keep fallback */
-        }
-      }
-    };
-    void load();
-  }, [params.id]);
+  const router = useRouter();
   const { location } = useUserLocation();
+  const { centers, loading: centersLoading } = useCenters(
+    location.latitude,
+    location.longitude,
+  );
   const { isConnected } = useConnectivity();
+
+  const [center, setCenter] = useState<EvacCenter | null>(null);
   const [route, setRoute] = useState<RouteResult | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [isCached, setIsCached] = useState(false);
+  const [aiGuidance, setAiGuidance] = useState<GeminiCenterGuidance | null>(
+    null,
+  );
+  const [aiLoading, setAiLoading] = useState(false);
+
+  // Find center from the live-discovered centers list
+  useEffect(() => {
+    if (!params.id || centersLoading) return;
+    const found = centers.find((c) => c.id === params.id);
+    if (found) setCenter(found);
+  }, [params.id, centers, centersLoading]);
+
+  // Load AI guidance when center resolves
+  useEffect(() => {
+    if (!center) return;
+    let cancelled = false;
+    setAiLoading(true);
+    void getCenterGuidance(center).then((guidance) => {
+      if (!cancelled) {
+        setAiGuidance(guidance);
+        setAiLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [center?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchRoute = async () => {
+    if (!center) return;
     setRouteLoading(true);
     setRouteError(null);
     setIsCached(false);
 
+    let resolvedRoute: RouteResult | null = null;
+
     if (isConnected) {
       try {
-        const result = await getRouteGuidance(
+        resolvedRoute = await getRouteGuidance(
           location,
           { latitude: center.lat, longitude: center.lng },
           "Kasalukuyang lokasyon",
           center.name,
         );
-        setRoute(result);
+        setRoute(resolvedRoute);
       } catch {
-        // Try cached route as fallback
         const cached = await getCachedRoute();
         if (cached) {
+          resolvedRoute = cached;
           setRoute(cached);
           setIsCached(true);
         } else {
@@ -111,25 +96,61 @@ export default function CenterDetailScreen() {
     } else {
       const cached = await getCachedRoute();
       if (cached) {
+        resolvedRoute = cached;
         setRoute(cached);
         setIsCached(true);
       } else {
         setRouteError("Offline — walang naka-cache na ruta.");
       }
     }
+
     setRouteLoading(false);
+
+    if (resolvedRoute && center) {
+      setAiLoading(true);
+      const guidance = await getCenterGuidance(center, {
+        distanceText: resolvedRoute.distanceText,
+        durationText: resolvedRoute.durationText,
+      });
+      setAiGuidance(guidance);
+      setAiLoading(false);
+    }
   };
+
+  if (centersLoading || !center) {
+    return (
+      <Screen>
+        <Text style={styles.header}>Center detail</Text>
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color={tokens.colors.ctaPrimary} />
+          <Text style={styles.body}>
+            {centersLoading
+              ? "Hinahanap ang mga sentro\u2026"
+              : "Hindi nahanap ang sentro. Bumalik at pumili ulit."}
+          </Text>
+          {!centersLoading && (
+            <Pressable
+              style={styles.secondaryButton}
+              onPress={() => router.back()}
+            >
+              <Text style={styles.secondaryButtonText}>Bumalik</Text>
+            </Pressable>
+          )}
+        </View>
+      </Screen>
+    );
+  }
 
   return (
     <Screen>
       <Text style={styles.header}>Center detail</Text>
       <View style={styles.card}>
         <Text style={styles.title}>{center.name}</Text>
+        {center.address ? (
+          <Text style={styles.body}>{center.address}</Text>
+        ) : null}
         <Text style={styles.body}>
-          {center.barangay} - {center.address}
-        </Text>
-        <Text style={styles.body}>
-          Approx distance: {center.distanceKm.toFixed(1)} km
+          {center.barangay} · {center.distanceKm.toFixed(1)} km mula sa iyo
         </Text>
         <Text style={styles.sub}>{center.uncertaintyNote}</Text>
         <Text style={styles.guardrail}>
@@ -138,9 +159,44 @@ export default function CenterDetailScreen() {
         </Text>
       </View>
 
+      {/* AI Guidance Panel */}
+      <View style={styles.aiCard}>
+        <View style={styles.aiCardHeader}>
+          <Text style={styles.aiCardTitle}>AI Guidance</Text>
+          <View style={styles.aiBadge}>
+            <Text style={styles.aiBadgeText}>Gemini</Text>
+          </View>
+        </View>
+
+        {aiLoading ? (
+          <View style={styles.aiLoadingRow}>
+            <ActivityIndicator size="small" color={tokens.colors.ctaPrimary} />
+            <Text style={styles.aiLoadingText}>
+              Kinukuha ang AI guidance\u2026
+            </Text>
+          </View>
+        ) : aiGuidance ? (
+          <View style={styles.aiContent}>
+            <Text style={styles.aiSummary}>{aiGuidance.summary}</Text>
+            <View style={styles.aiSection}>
+              <Text style={styles.aiSectionLabel}>Ihanda:</Text>
+              <Text style={styles.aiSectionText}>{aiGuidance.preparation}</Text>
+            </View>
+            {aiGuidance.routeCaution ? (
+              <View style={[styles.aiSection, styles.aiCautionSection]}>
+                <Text style={styles.aiSectionLabel}>Paalala sa Ruta:</Text>
+                <Text style={styles.aiSectionText}>
+                  {aiGuidance.routeCaution}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+      </View>
+
       <Pressable
         style={styles.primaryButton}
-        onPress={fetchRoute}
+        onPress={() => void fetchRoute()}
         disabled={routeLoading}
       >
         {routeLoading ? (
@@ -169,7 +225,7 @@ export default function CenterDetailScreen() {
             </View>
           )}
           <Text style={styles.title}>
-            Route: {route.fromLabel} → {route.toLabel}
+            Route: {route.fromLabel} {"\u2192"} {route.toLabel}
           </Text>
           <View style={styles.metricsRow}>
             <Text style={styles.metric}>{route.distanceText}</Text>
@@ -213,6 +269,12 @@ const styles = StyleSheet.create({
     padding: tokens.spacing.md,
     gap: tokens.spacing.sm,
   },
+  loadingWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: tokens.spacing.md,
+    paddingVertical: tokens.spacing.lg,
+  },
   title: {
     color: tokens.colors.textPrimary,
     fontSize: 18,
@@ -232,7 +294,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     minHeight: 52,
-    borderRadius: tokens.radius.none,
+    borderRadius: tokens.radius.md,
     backgroundColor: tokens.colors.ctaPrimary,
     alignItems: "center",
     justifyContent: "center",
@@ -241,6 +303,20 @@ const styles = StyleSheet.create({
     color: tokens.colors.ctaText,
     fontSize: tokens.type.body,
     fontWeight: "700",
+  },
+  secondaryButton: {
+    minHeight: 44,
+    borderRadius: tokens.radius.md,
+    borderWidth: 1,
+    borderColor: tokens.colors.ctaPrimary,
+    paddingHorizontal: tokens.spacing.lg,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  secondaryButtonText: {
+    color: tokens.colors.ctaPrimary,
+    fontSize: tokens.type.body,
+    fontWeight: "600",
   },
   errorCard: {
     backgroundColor: "rgba(239,68,68,0.15)",
@@ -275,6 +351,70 @@ const styles = StyleSheet.create({
     color: tokens.colors.textDisabled,
     fontSize: tokens.type.label,
     fontStyle: "italic",
+  },
+  aiCard: {
+    backgroundColor: tokens.colors.surface,
+    borderRadius: tokens.radius.lg,
+    borderWidth: 1,
+    borderColor: tokens.colors.ctaPrimary,
+    padding: tokens.spacing.md,
+    gap: tokens.spacing.sm,
+  },
+  aiCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing.sm,
+  },
+  aiCardTitle: {
+    color: tokens.colors.textPrimary,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  aiBadge: {
+    backgroundColor: tokens.colors.ctaPrimary,
+    borderRadius: tokens.radius.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  aiBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  aiLoadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing.sm,
+  },
+  aiLoadingText: {
+    color: tokens.colors.textSecondary,
+    fontSize: tokens.type.body,
+  },
+  aiContent: {
+    gap: tokens.spacing.sm,
+  },
+  aiSummary: {
+    color: tokens.colors.textPrimary,
+    fontSize: tokens.type.body,
+    lineHeight: 21,
+  },
+  aiSection: {
+    gap: 2,
+  },
+  aiCautionSection: {
+    backgroundColor: "rgba(245,158,11,0.10)",
+    borderRadius: tokens.radius.sm,
+    padding: tokens.spacing.sm,
+  },
+  aiSectionLabel: {
+    color: tokens.colors.textPrimary,
+    fontSize: tokens.type.label,
+    fontWeight: "700",
+  },
+  aiSectionText: {
+    color: tokens.colors.textSecondary,
+    fontSize: tokens.type.body,
+    lineHeight: 20,
   },
   stepsContainer: {
     maxHeight: 300,
