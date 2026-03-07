@@ -1,6 +1,12 @@
 import { useRouter } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { Severity } from "@/src/design/tokens";
@@ -9,6 +15,8 @@ import { AlertCard } from "@/src/features/alerts/alert-card";
 import { useAlerts } from "@/src/features/alerts/use-alerts";
 import { useWeatherSignal } from "@/src/features/alerts/use-weather-signal";
 import { useCenters } from "@/src/features/centers/use-centers";
+import type { GlobalAction } from "@/src/features/decision-engine/types";
+import { useEvacuationDecision } from "@/src/features/decision-engine/use-evacuation-decision";
 import { HomeFloatingPanel } from "@/src/features/home/HomeFloatingPanel";
 import { DPWHProjectPanel } from "@/src/features/map/DPWHProjectPanel";
 import { LocationSearchBar } from "@/src/features/map/LocationSearchBar";
@@ -24,7 +32,6 @@ import { useFloodStreetHighlights } from "@/src/features/map/use-flood-street-hi
 import { useMapReports } from "@/src/features/map/use-map-reports";
 import { useUserLocation } from "@/src/features/map/use-user-location";
 import { useConnectivity } from "@/src/features/offline/use-connectivity";
-import { usePreparedness } from "@/src/features/preparedness/use-preparedness";
 import type { PlaceLocation } from "@/src/services/places";
 import type { ReportDepth } from "@/src/types/domain";
 import type { HourlyForecastEntry } from "@/src/types/weather";
@@ -48,6 +55,20 @@ const SIGNAL_LABELS: Record<Severity, string> = {
   PREPARE: "Prepare",
   LEAVE: "Leave area",
   EVACUATE: "Evacuate now",
+};
+
+const ACTION_LABELS: Record<GlobalAction, string> = {
+  STAY_MONITOR: "Stay and Monitor",
+  PREPARE_GO_BAG: "Prepare Go-Bag",
+  LEAVE_NOW: "Leave Now",
+  EVACUATE_NOW: "Evacuate Immediately",
+};
+
+const ACTION_DESCRIPTIONS: Record<GlobalAction, string> = {
+  STAY_MONITOR: "Conditions are manageable. Stay alert and monitor updates.",
+  PREPARE_GO_BAG: "Prepare essentials. Be ready to leave if conditions worsen.",
+  LEAVE_NOW: "Head to the nearest safe evacuation center now.",
+  EVACUATE_NOW: "Immediate evacuation recommended. Go to the nearest center.",
 };
 
 function formatHour(iso: string): string {
@@ -101,9 +122,13 @@ export default function HomeScreen() {
     loading: weatherLoading,
   } = useWeatherSignal(location.latitude, location.longitude);
   const { highestSeverityAlert } = useAlerts();
-  const { tasks, toggleTask, completion } = usePreparedness();
-  const { confirmationHint, addFloodReport } = useMapReports();
+  const { floodReports, drainReports } = useMapReports();
   const { centers } = useCenters(location.latitude, location.longitude);
+  const {
+    decision,
+    loading: decisionLoading,
+    evaluate: runDecision,
+  } = useEvacuationDecision();
 
   const { entries: floodEntries, markers: floodMarkers } = useFloodCoverage();
   const { markers: dpwhMarkers, getProjectById } = useDpwhProjects();
@@ -159,6 +184,31 @@ export default function HomeScreen() {
     });
   }, []);
 
+  const handleEvaluate = useCallback(() => {
+    void runDecision({
+      userLocation: location,
+      weather,
+      signal,
+      floodReports,
+      drainReports,
+      centers,
+    });
+  }, [
+    runDecision,
+    location,
+    weather,
+    signal,
+    floodReports,
+    drainReports,
+    centers,
+  ]);
+
+  const routeOverlay = useMemo(() => {
+    const bestRoute = decision?.recommendedCenters[0]?.route;
+    if (!bestRoute) return null;
+    return { polyline: bestRoute.polyline, color: "#000000", width: 4 };
+  }, [decision]);
+
   const initialRegion = {
     latitude: location.latitude,
     longitude: location.longitude,
@@ -205,6 +255,7 @@ export default function HomeScreen() {
         initialRegion={initialRegion}
         markers={markers}
         polylines={polylines}
+        routeOverlay={routeOverlay}
         showsMyLocationButton={false}
         onMarkerPress={handleMarkerPress}
       />
@@ -429,61 +480,107 @@ export default function HomeScreen() {
             </Text>
           </View>
 
-          {/* Checklist card */}
+          {/* Evacuation Assessment card */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>
-              Preparedness checklist ({completion})
-            </Text>
-            {tasks.map((task) => (
-              <Pressable
-                key={task.id}
-                style={styles.checkRow}
-                onPress={() => toggleTask(task.id)}
-              >
-                <Text style={styles.checkMark}>
-                  {task.done ? "\u2713" : "\u25CB"}
-                </Text>
-                <Text style={styles.cardSub}>{task.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-
-          {/* Report card */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Mag-report ng baha</Text>
-            <Text style={styles.cardSub}>{confirmationHint}</Text>
-            <View style={styles.depthGrid}>
-              {depthButtons.map((depth) => (
-                <Pressable
-                  key={depth.id}
-                  style={styles.depthButton}
-                  onPress={() =>
-                    addFloodReport(
-                      depth.id,
-                      isConnected,
-                      location.latitude,
-                      location.longitude,
-                    )
-                  }
+            <Text style={styles.cardTitle}>Evacuation Assessment</Text>
+            {decision ? (
+              <>
+                <View
+                  style={[
+                    styles.actionBanner,
+                    { backgroundColor: signalColor },
+                  ]}
                 >
-                  <View
-                    style={[
-                      styles.depthIndicator,
-                      { backgroundColor: DEPTH_COLORS[depth.id] },
-                    ]}
-                  />
-                  <Text style={styles.depthText}>{depth.label}</Text>
+                  <Text style={styles.actionBannerText}>
+                    {ACTION_LABELS[decision.globalAction]}
+                  </Text>
+                </View>
+                <Text style={styles.cardSub}>
+                  {ACTION_DESCRIPTIONS[decision.globalAction]}
+                </Text>
+                <View style={styles.explainBox}>
+                  <Text style={styles.explainText}>
+                    {decision.explainability.weatherReason}
+                  </Text>
+                  <Text style={styles.explainText}>
+                    {decision.explainability.reportReason}
+                  </Text>
+                  <Text style={styles.explainText}>
+                    {decision.explainability.routeReason}
+                  </Text>
+                </View>
+                {decision.recommendedCenters.length > 0 ? (
+                  <View style={styles.centerRecommendations}>
+                    <Text style={styles.cardSub}>Recommended centers:</Text>
+                    {decision.recommendedCenters.slice(0, 3).map((ev) => (
+                      <Pressable
+                        key={ev.center.id}
+                        style={styles.centerRow}
+                        onPress={() => {
+                          mapRef.current?.animateToRegion(
+                            {
+                              latitude: ev.center.lat,
+                              longitude: ev.center.lng,
+                              latitudeDelta: 0.01,
+                              longitudeDelta: 0.01,
+                            },
+                            600,
+                          );
+                        }}
+                      >
+                        <Text style={styles.centerName}>{ev.center.name}</Text>
+                        <Text style={styles.centerMeta}>
+                          {ev.center.distanceKm.toFixed(1)} km ·{" "}
+                          {ev.center.status}
+                          {ev.route ? ` · ${ev.route.durationText}` : ""}
+                        </Text>
+                      </Pressable>
+                    ))}
+                    {decision.recommendedCenters[0]?.route ? (
+                      <Pressable
+                        style={styles.primaryButton}
+                        onPress={() => {
+                          const best = decision.recommendedCenters[0];
+                          if (best)
+                            router.push({
+                              pathname: "/navigate",
+                              params: { centerId: best.center.id },
+                            } as never);
+                        }}
+                      >
+                        <Text style={styles.primaryButtonText}>
+                          Start Navigation
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ) : null}
+                <Text style={styles.disclaimer}>{decision.disclaimerText}</Text>
+                <Text style={styles.cardSub}>
+                  Confidence: {Math.round(decision.confidence * 100)}%
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.cardSub}>
+                  Evaluate current conditions to get a personalized evacuation
+                  recommendation.
+                </Text>
+                <Pressable
+                  style={styles.primaryButton}
+                  onPress={handleEvaluate}
+                  disabled={decisionLoading}
+                >
+                  {decisionLoading ? (
+                    <ActivityIndicator color={tokens.colors.ctaText} />
+                  ) : (
+                    <Text style={styles.primaryButtonText}>
+                      Evaluate Evacuation
+                    </Text>
+                  )}
                 </Pressable>
-              ))}
-            </View>
-            <Pressable
-              style={styles.secondaryButton}
-              onPress={() => router.push("/report-drain" as never)}
-            >
-              <Text style={styles.secondaryButtonText}>
-                Mag-report ng baradong kanal
-              </Text>
-            </Pressable>
+              </>
+            )}
           </View>
         </HomeFloatingPanel>
       ) : null}
@@ -659,18 +756,6 @@ const styles = StyleSheet.create({
     fontSize: tokens.type.body,
     lineHeight: 21,
   },
-  checkRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-  },
-  checkMark: {
-    color: tokens.colors.textPrimary,
-    fontSize: 16,
-    width: 18,
-    marginTop: 2,
-  },
-
   weatherHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -723,39 +808,51 @@ const styles = StyleSheet.create({
   },
   freshness: { color: tokens.colors.textDisabled, fontSize: 11 },
 
-  depthGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: tokens.spacing.sm,
-  },
-  depthButton: {
-    minWidth: "47%",
-    flexGrow: 1,
-    minHeight: 48,
+  actionBanner: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: tokens.radius.md,
-    backgroundColor: tokens.colors.surfaceAlt,
-    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
   },
-  depthIndicator: { width: 12, height: 12, borderRadius: 6 },
-  depthText: {
+  actionBannerText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
+  explainBox: {
+    backgroundColor: tokens.colors.surfaceAlt,
+    borderRadius: tokens.radius.sm,
+    padding: tokens.spacing.sm,
+    gap: 4,
+  },
+  explainText: { color: tokens.colors.textSecondary, fontSize: 12 },
+  centerRecommendations: { gap: tokens.spacing.xs },
+  centerRow: {
+    backgroundColor: tokens.colors.surfaceAlt,
+    borderRadius: tokens.radius.sm,
+    padding: tokens.spacing.sm,
+    gap: 2,
+  },
+  centerName: {
     color: tokens.colors.textPrimary,
     fontSize: tokens.type.body,
     fontWeight: "600",
   },
-  secondaryButton: {
+  centerMeta: {
+    color: tokens.colors.textSecondary,
+    fontSize: tokens.type.label,
+  },
+  primaryButton: {
     minHeight: 48,
     borderRadius: tokens.radius.md,
-    borderWidth: 1,
-    borderColor: tokens.colors.ctaPrimary,
+    backgroundColor: tokens.colors.ctaPrimary,
     alignItems: "center",
     justifyContent: "center",
   },
-  secondaryButtonText: {
-    color: tokens.colors.ctaPrimary,
+  primaryButtonText: {
+    color: tokens.colors.ctaText,
     fontSize: tokens.type.body,
-    fontWeight: "600",
+    fontWeight: "700",
+  },
+  disclaimer: {
+    color: tokens.colors.textDisabled,
+    fontSize: 11,
+    fontStyle: "italic",
   },
 });
