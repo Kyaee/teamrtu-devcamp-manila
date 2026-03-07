@@ -11,6 +11,7 @@ import type {
   DrainReportInsert,
   FloodReportInsert,
   NearbyEvacCenterRow,
+  NearbyReportSummaryRow,
 } from "@/src/types/supabase";
 
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -186,4 +187,33 @@ export async function confirmNearbyReports(
   });
   if (error) throw error;
   return (data as number) ?? 0;
+}
+
+// ---------------------------------------------------------------------------
+// Nearby Report Summary (aggregated counts for risk context)
+// ---------------------------------------------------------------------------
+
+const EMPTY_SUMMARY: NearbyReportSummaryRow = {
+  flood_pending_count: 0,
+  flood_confirmed_count: 0,
+  flood_confirmed_high_count: 0,
+  drain_count: 0,
+};
+
+export async function fetchNearbyReportSummary(
+  lat: number,
+  lng: number,
+  radiusM = 200,
+): Promise<NearbyReportSummaryRow> {
+  if (!supabase) return EMPTY_SUMMARY;
+  const { data, error } = await supabase.rpc("nearby_report_summary", {
+    p_lat: lat,
+    p_lng: lng,
+    p_radius_m: radiusM,
+  });
+  if (error) throw error;
+  if (Array.isArray(data) && data.length > 0) {
+    return data[0] as NearbyReportSummaryRow;
+  }
+  return (data as NearbyReportSummaryRow) ?? EMPTY_SUMMARY;
 }

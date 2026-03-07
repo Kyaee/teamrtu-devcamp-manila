@@ -10,12 +10,18 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { tokens } from "@/src/design/tokens";
+import { useAlerts } from "@/src/features/alerts/use-alerts";
+import { useWeatherSignal } from "@/src/features/alerts/use-weather-signal";
 import { useCenters } from "@/src/features/centers/use-centers";
 import type { MapDisplayRef, MapMarker } from "@/src/features/map/MapDisplay";
 import MapDisplay from "@/src/features/map/MapDisplay";
+import { useMapReports } from "@/src/features/map/use-map-reports";
 import { useUserLocation } from "@/src/features/map/use-user-location";
-import type { NavStatus } from "@/src/features/navigation/use-navigation-session";
-import { useNavigationSession } from "@/src/features/navigation/use-navigation-session";
+import type {
+  NavStatus,
+  useNavigationSession,
+  type FloodContext,
+} from "@/src/features/navigation/use-navigation-session";
 import type { LatLng } from "@/src/services/maps";
 
 const STATUS_LABELS: Record<NavStatus, string> = {
@@ -33,6 +39,16 @@ export default function NavigateScreen() {
   const { back } = useRouter();
   const { location } = useUserLocation();
   const { centers } = useCenters(location.latitude, location.longitude);
+  const { floodReports } = useMapReports();
+  const { highestSeverityAlert } = useAlerts(
+    location.latitude,
+    location.longitude,
+  );
+  const { signal } = useWeatherSignal(
+    location.latitude,
+    location.longitude,
+    highestSeverityAlert?.severity,
+  );
   const mapRef = useRef<MapDisplayRef>(null);
 
   const targetCenter = useMemo(() => {
@@ -43,7 +59,16 @@ export default function NavigateScreen() {
     ? { latitude: targetCenter.lat, longitude: targetCenter.lng }
     : null;
 
-  const nav = useNavigationSession(destination, targetCenter?.name);
+  const floodContext: FloodContext | undefined = useMemo(
+    () => (floodReports.length > 0 ? { floodReports, signal } : undefined),
+    [floodReports, signal],
+  );
+
+  const nav = useNavigationSession(
+    destination,
+    targetCenter?.name,
+    floodContext,
+  );
 
   // Auto-start navigation when destination is available
   const [autoStarted, setAutoStarted] = useState(false);

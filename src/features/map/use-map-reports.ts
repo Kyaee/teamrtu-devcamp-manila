@@ -83,6 +83,7 @@ function dbDrainToDomain(row: DbDrainReport): DrainReport {
 export function useMapReports() {
   const [floodReports, setFloodReports] = useState<FloodReport[]>([]);
   const [drainReports, setDrainReports] = useState<DrainReport[]>([]);
+  const [reportsLoaded, setReportsLoaded] = useState(false);
   const [queueCount, setQueueCount] = useState<number>(0);
   const [syncMessage, setSyncMessage] = useState<string>(
     "Handa ang sync status.",
@@ -111,11 +112,12 @@ export function useMapReports() {
           const drains = drainRows.map(dbDrainToDomain);
           setFloodReports(floods);
           setDrainReports(drains);
+          setReportsLoaded(true);
           await writeJson(FLOOD_KEY, floods);
           await writeJson(DRAIN_KEY, drains);
         }
       } catch {
-        // keep cache on fetch failure
+        if (!cancelled) setReportsLoaded(true);
       }
     };
     void load();
@@ -354,6 +356,7 @@ export function useMapReports() {
   return {
     floodReports,
     drainReports,
+    reportsLoaded,
     queueCount,
     syncMessage,
     confirmationHint,

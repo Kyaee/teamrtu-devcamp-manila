@@ -1,7 +1,13 @@
 import type { Severity } from "@/src/design/tokens";
-import { getRouteGuidance, type RouteResult } from "@/src/services/maps";
-
 import {
+  getRouteGuidance,
+  getRouteAlternatives,
+  type RouteResult,
+} from "@/src/services/maps";
+
+import { isTyphoonMode, annotateCenterRisk } from "./risk-policy";
+import {
+  evaluateRouteBlock,
   scoreCenterReadiness,
   scoreFloodReports,
   scoreRouteRisk,
@@ -51,7 +57,10 @@ function deriveConfidence(
 export async function buildEvacuationDecision(
   input: DecisionInput,
 ): Promise<DecisionOutcome> {
-  const { userLocation, weather, signal, floodReports, centers } = input;
+  const { userLocation, weather, signal, floodReports, drainReports, centers } =
+    input;
+
+  const typhoonActive = isTyphoonMode(signal);
 
   const { score: weatherScore, reason: weatherReason } = scoreWeatherRisk(
     signal,
@@ -69,29 +78,78 @@ export async function buildEvacuationDecision(
 
   const evaluations: CenterEvaluation[] = [];
   for (const center of candidateCenters) {
+    const centerRisk = annotateCenterRisk(
+      center.id,
+      center.lat,
+      center.lng,
+      floodReports,
+      drainReports,
+      typhoonActive,
+    );
+
     let route: RouteResult | null = null;
+    let routeBlock = evaluateRouteBlock(null, floodReports, typhoonActive);
+
     try {
-      route = await getRouteGuidance(
-        userLocation,
-        { latitude: center.lat, longitude: center.lng },
-        "Kasalukuyang lokasyon",
-        center.name,
-      );
+      if (typhoonActive && floodReports.length > 0) {
+        // Request alternatives so we can pick a non-blocked route
+        const alternatives = await getRouteAlternatives(
+          userLocation,
+          { latitude: center.lat, longitude: center.lng },
+          "Kasalukuyang lokasyon",
+          center.name,
+        );
+
+        // Evaluate each alternative and pick the first non-blocked route
+        let bestNonBlocked: RouteResult | null = null;
+        let bestBlock = evaluateRouteBlock(null, floodReports, typhoonActive);
+
+        for (const alt of alternatives) {
+          const block = evaluateRouteBlock(alt, floodReports, typhoonActive);
+          if (!block.blocked) {
+            bestNonBlocked = alt;
+            bestBlock = block;
+            break;
+          }
+          // Track least-hazardous blocked route as fallback
+          if (!route || block.hazardPoints < routeBlock.hazardPoints) {
+            route = alt;
+            routeBlock = block;
+          }
+        }
+
+        if (bestNonBlocked) {
+          route = bestNonBlocked;
+          routeBlock = bestBlock;
+        }
+      } else {
+        route = await getRouteGuidance(
+          userLocation,
+          { latitude: center.lat, longitude: center.lng },
+          "Kasalukuyang lokasyon",
+          center.name,
+        );
+        routeBlock = evaluateRouteBlock(route, floodReports, typhoonActive);
+      }
     } catch {
       // route unavailable — continue with null
     }
 
-    const { score: routeRisk, reason: routeReason } = scoreRouteRisk(
+    const { score: routeRiskScore, reason: routeReason } = scoreRouteRisk(
       route,
       floodReports,
     );
-    const { score: centerRisk, reason: centerReason } =
+    const { score: readinessScore, reason: centerReason } =
       scoreCenterReadiness(center);
 
-    const compositeScore = routeRisk * 0.4 + centerRisk * 0.6;
+    const drainPenalty = centerRisk.drain.softPenalty;
+    const compositeScore =
+      routeRiskScore * 0.4 + readinessScore * 0.6 + drainPenalty;
+
+    const blocked = centerRisk.blocked || routeBlock.blocked;
 
     const riskLevel: Severity =
-      compositeScore >= 60
+      blocked || compositeScore >= 60
         ? "EVACUATE"
         : compositeScore >= 40
           ? "LEAVE"
@@ -99,28 +157,40 @@ export async function buildEvacuationDecision(
             ? "PREPARE"
             : "MONITOR";
 
+    const reasons = [routeReason, centerReason];
+    if (blocked) reasons.unshift(centerRisk.shortReason);
+    if (routeBlock.blocked) reasons.unshift(routeBlock.reason);
+    if (drainPenalty > 0) reasons.push(centerRisk.drain.reason);
+
     evaluations.push({
       center,
       route,
-      score: compositeScore,
+      score: blocked ? 999 : Math.min(compositeScore, 100),
       riskLevel,
-      reasons: [routeReason, centerReason],
+      reasons,
+      blocked,
     });
   }
 
   evaluations.sort((a, b) => a.score - b.score);
 
-  const hasAnyRoute = evaluations.some((e) => e.route !== null);
+  const recommended = typhoonActive
+    ? evaluations.filter((e) => !e.blocked)
+    : evaluations;
+
+  const hasAnyRoute = recommended.some((e) => e.route !== null);
   const confidence = deriveConfidence(weatherScore, reportScore, hasAnyRoute);
 
-  const bestRoute = evaluations[0]?.route;
+  const bestRoute = recommended[0]?.route;
   const routeReason = bestRoute
     ? `Best route: ${bestRoute.distanceText}, ${bestRoute.durationText}`
-    : "No route currently available";
+    : recommended.length === 0
+      ? "Lahat ng ruta ay naka-block dahil sa baha. Hintayin ang update."
+      : "No route currently available";
 
   return {
     globalAction,
-    recommendedCenters: evaluations,
+    recommendedCenters: recommended.length > 0 ? recommended : evaluations,
     confidence,
     explainability: {
       weatherReason,
@@ -128,6 +198,8 @@ export async function buildEvacuationDecision(
       routeReason,
     },
     disclaimerText:
-      "Ito ay rekomendasyon lamang. Palaging i-verify ang kondisyon sa lugar. Hindi guaranteed safe ang anumang ruta.",
+      recommended.length === 0 && typhoonActive
+        ? "WARNING: Lahat ng ruta ay may confirmed flood reports. Manatili sa ligtas na lugar habang hinihintay ang bagong assessment."
+        : "Ito ay rekomendasyon lamang. Palaging i-verify ang kondisyon sa lugar. Hindi guaranteed safe ang anumang ruta.",
   };
 }

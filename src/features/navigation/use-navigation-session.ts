@@ -1,9 +1,11 @@
 import * as Location from "expo-location";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import type { Severity } from "@/src/design/tokens";
 import { getRouteVerbalContext } from "@/src/services/ai";
 import type { LatLng, RouteResult, RouteStep } from "@/src/services/maps";
 import { getCachedRoute, getRouteGuidance } from "@/src/services/maps";
+import type { FloodReport } from "@/src/types/domain";
 import {
   clearVoiceQueue,
   enqueueVoice,
@@ -12,6 +14,7 @@ import {
 } from "@/src/services/voice-navigation";
 
 import { closestPointOnPolyline, haversineMeters } from "./geo-utils";
+import { getFloodSafeRoute } from "./flood-safe-routing";
 
 export type NavStatus =
   | "idle"
@@ -39,9 +42,15 @@ const STEP_ADVANCE_THRESHOLD_M = 25;
 const ARRIVAL_THRESHOLD_M = 30;
 const LOCATION_UPDATE_INTERVAL_MS = 3000;
 
+export type FloodContext = {
+  floodReports: FloodReport[];
+  signal: Severity;
+};
+
 export function useNavigationSession(
   destination: LatLng | null,
   destinationLabel = "Evacuation center",
+  floodContext?: FloodContext,
 ) {
   const [state, setState] = useState<NavigationState>({
     status: "idle",
@@ -54,6 +63,9 @@ export function useNavigationSession(
     isMuted: false,
     isOffRoute: false,
   });
+
+  const floodContextRef = useRef(floodContext);
+  floodContextRef.current = floodContext;
 
   const locationSubRef = useRef<Location.LocationSubscription | null>(null);
   const rerouteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -196,12 +208,29 @@ export function useNavigationSession(
 
       if (!destination) throw new Error("No destination");
 
-      const newRoute = await getRouteGuidance(
-        from,
-        destination,
-        "Kasalukuyang lokasyon",
-        destinationLabel,
-      );
+      let newRoute: RouteResult;
+      let floodWarning: string | null = null;
+
+      const fc = floodContextRef.current;
+      if (fc && fc.floodReports.length > 0) {
+        const result = await getFloodSafeRoute(
+          from,
+          destination,
+          fc.floodReports,
+          fc.signal,
+          "Kasalukuyang lokasyon",
+          destinationLabel,
+        );
+        newRoute = result.route;
+        floodWarning = result.warning;
+      } else {
+        newRoute = await getRouteGuidance(
+          from,
+          destination,
+          "Kasalukuyang lokasyon",
+          destinationLabel,
+        );
+      }
 
       setState((prev) => ({
         ...prev,
@@ -211,10 +240,9 @@ export function useNavigationSession(
         currentPosition: from,
         etaText: newRoute.durationText,
         isOffRoute: false,
-        errorMessage: null,
+        errorMessage: floodWarning,
       }));
 
-      // Announce first step immediately, then enqueue Gemini reroute context
       announceStep(newRoute.steps, 0);
       void getRouteVerbalContext(
         destinationLabel,
@@ -279,17 +307,45 @@ export function useNavigationSession(
       };
 
       let route: RouteResult;
-      try {
-        route = await getRouteGuidance(
-          from,
-          destination,
-          "Kasalukuyang lokasyon",
-          destinationLabel,
-        );
-      } catch {
-        const cached = await getCachedRoute();
-        if (!cached) throw new Error("No route available");
-        route = cached;
+      let floodWarning: string | null = null;
+
+      const fc = floodContextRef.current;
+      if (fc && fc.floodReports.length > 0) {
+        try {
+          const result = await getFloodSafeRoute(
+            from,
+            destination,
+            fc.floodReports,
+            fc.signal,
+            "Kasalukuyang lokasyon",
+            destinationLabel,
+          );
+          route = result.route;
+          floodWarning = result.warning;
+          if (result.allBlocked) {
+            speak(
+              "Babala: lahat ng ruta ay dumadaan sa may baha. Mag-ingat.",
+              "critical",
+            );
+          }
+        } catch {
+          const cached = await getCachedRoute();
+          if (!cached) throw new Error("No route available");
+          route = cached;
+        }
+      } else {
+        try {
+          route = await getRouteGuidance(
+            from,
+            destination,
+            "Kasalukuyang lokasyon",
+            destinationLabel,
+          );
+        } catch {
+          const cached = await getCachedRoute();
+          if (!cached) throw new Error("No route available");
+          route = cached;
+        }
       }
 
       setState((prev) => ({
@@ -299,11 +355,10 @@ export function useNavigationSession(
         currentStepIndex: 0,
         currentPosition: from,
         etaText: route.durationText,
-        errorMessage: null,
+        errorMessage: floodWarning,
         isOffRoute: false,
       }));
 
-      // Announce first step immediately, then enqueue Gemini trip-start context
       announceStep(route.steps, 0);
       void getRouteVerbalContext(
         destinationLabel,

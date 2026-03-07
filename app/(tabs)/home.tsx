@@ -17,7 +17,6 @@ import { AlertCard } from "@/src/features/alerts/alert-card";
 import { useAlerts } from "@/src/features/alerts/use-alerts";
 import { useWeatherSignal } from "@/src/features/alerts/use-weather-signal";
 import { useCenters } from "@/src/features/centers/use-centers";
-import { useGeminiCenter } from "@/src/features/centers/use-gemini-center";
 import type { GlobalAction } from "@/src/features/decision-engine/types";
 import { useEvacuationDecision } from "@/src/features/decision-engine/use-evacuation-decision";
 import { HomeFloatingPanel } from "@/src/features/home/HomeFloatingPanel";
@@ -137,21 +136,26 @@ export default function HomeScreen() {
   const router = useRouter();
   const { isConnected } = useConnectivity();
   const { location } = useUserLocation();
+  const { highestSeverityAlert } = useAlerts(
+    location.latitude,
+    location.longitude,
+  );
   const {
     signal,
     weather,
     loading: weatherLoading,
-  } = useWeatherSignal(location.latitude, location.longitude);
-  const { highestSeverityAlert } = useAlerts();
-  const { floodReports, drainReports } = useMapReports();
+    signalOverride,
+    setSignalOverride,
+  } = useWeatherSignal(
+    location.latitude,
+    location.longitude,
+    highestSeverityAlert?.severity,
+  );
+  const { floodReports, drainReports, reportsLoaded, addFloodReport } =
+    useMapReports();
   const { centers, loading: centersLoading } = useCenters(
     location.latitude,
     location.longitude,
-  );
-  const { choice: geminiChoice, loading: geminiLoading } = useGeminiCenter(
-    location.latitude,
-    location.longitude,
-    centers,
   );
   const {
     decision,
@@ -273,6 +277,46 @@ export default function HomeScreen() {
     centers,
   ]);
 
+  const isTyphoon =
+    signal === "PREPARE" || signal === "LEAVE" || signal === "EVACUATE";
+
+  const prevFloodCountRef = useRef(0);
+
+  useEffect(() => {
+    if (!isTyphoon) return;
+    if (decisionLoading) return;
+    if (centersLoading || centers.length === 0) return;
+    if (!reportsLoaded) return;
+
+    // Re-evaluate when flood reports arrive or change significantly
+    const floodCountChanged =
+      decision && floodReports.length !== prevFloodCountRef.current;
+    if (decision && !floodCountChanged) return;
+
+    prevFloodCountRef.current = floodReports.length;
+    void runDecision({
+      userLocation: location,
+      weather,
+      signal,
+      floodReports,
+      drainReports,
+      centers,
+    });
+  }, [
+    isTyphoon,
+    decisionLoading,
+    decision,
+    centersLoading,
+    centers,
+    reportsLoaded,
+    runDecision,
+    location,
+    weather,
+    signal,
+    floodReports,
+    drainReports,
+  ]);
+
   const routeOverlay = useMemo(() => {
     const bestRoute = decision?.recommendedCenters[0]?.route;
     if (!bestRoute) return null;
@@ -300,11 +344,46 @@ export default function HomeScreen() {
         category: "center",
       });
     }
+
+    for (const r of floodReports) {
+      result.push({
+        id: `flood-${r.id}`,
+        latitude: r.lat,
+        longitude: r.lng,
+        pinColor: DEPTH_COLORS[r.depth],
+        opacity: r.status === "confirmed" ? 1 : 0.6,
+        title: `Flood: ${r.depth} depth`,
+        description: `${r.status === "confirmed" ? "Confirmed" : "Pending"} — ${r.reporterLabel}`,
+        category: "flood",
+      });
+    }
+
+    for (const d of drainReports) {
+      result.push({
+        id: `drain-${d.id}`,
+        latitude: d.lat,
+        longitude: d.lng,
+        pinColor: "#6B7280",
+        opacity: d.status === "confirmed" ? 1 : 0.6,
+        title: "Clogged drain",
+        description: d.description,
+        category: "drain",
+      });
+    }
+
     if (showDpwhLayer) result.push(...dpwhMarkers);
     if (searchMarker) result.push(searchMarker);
     if (direMarker) result.push(direMarker);
     return result;
-  }, [centers, searchMarker, dpwhMarkers, showDpwhLayer, direMarker]);
+  }, [
+    centers,
+    floodReports,
+    drainReports,
+    searchMarker,
+    dpwhMarkers,
+    showDpwhLayer,
+    direMarker,
+  ]);
 
   const zones: MapZone[] = useMemo(() => {
     if (!showFloodLayer) return [];
@@ -658,67 +737,6 @@ export default function HomeScreen() {
             </Text>
           </View>
 
-          {/* Gemini Nearest Center card */}
-          <View style={styles.card}>
-            <View style={styles.geminiHeader}>
-              <Text style={styles.cardTitle}>Pinakamalapit na Sentro</Text>
-              <View style={styles.aiBadge}>
-                <Text style={styles.aiBadgeText}>AI</Text>
-              </View>
-            </View>
-
-            {centersLoading || geminiLoading ? (
-              <View style={styles.geminiLoadingRow}>
-                <ActivityIndicator
-                  size="small"
-                  color={tokens.colors.ctaPrimary}
-                />
-                <Text style={styles.cardSub}>
-                  {centersLoading
-                    ? "Hinahanap ang mga sentro\u2026"
-                    : "Pinipili ng AI ang pinakamainam na sentro\u2026"}
-                </Text>
-              </View>
-            ) : geminiChoice ? (
-              (() => {
-                const chosenCenter = centers.find(
-                  (c) => c.id === geminiChoice.centerId,
-                );
-                if (!chosenCenter) return null;
-                return (
-                  <View style={styles.geminiResult}>
-                    <Text style={styles.centerName}>{chosenCenter.name}</Text>
-                    <Text style={styles.centerMeta}>
-                      {chosenCenter.distanceKm.toFixed(1)} km ·{" "}
-                      {chosenCenter.status}
-                    </Text>
-                    <Text style={styles.geminiReason}>
-                      {geminiChoice.reason}
-                    </Text>
-                    {geminiChoice.isFallback ? null : (
-                      <View style={styles.aiSourceRow}>
-                        <Text style={styles.aiSourceText}>
-                          Pinili ng Gemini AI
-                        </Text>
-                      </View>
-                    )}
-                    <Link href={`/center/${chosenCenter.id}`} asChild>
-                      <Pressable style={styles.primaryButton}>
-                        <Text style={styles.primaryButtonText}>
-                          Tingnan ang Detalye at Ruta
-                        </Text>
-                      </Pressable>
-                    </Link>
-                  </View>
-                );
-              })()
-            ) : (
-              <Text style={styles.cardSub}>
-                I-grant ang lokasyon para mahanap ang pinakamalapit na sentro.
-              </Text>
-            )}
-          </View>
-
           {/* Evacuation Assessment card */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Evacuation Assessment</Text>
@@ -754,7 +772,10 @@ export default function HomeScreen() {
                     {decision.recommendedCenters.slice(0, 3).map((ev) => (
                       <Pressable
                         key={ev.center.id}
-                        style={styles.centerRow}
+                        style={[
+                          styles.centerRow,
+                          ev.blocked && styles.centerRowBlocked,
+                        ]}
                         onPress={() => {
                           mapRef.current?.animateToRegion(
                             {
@@ -767,11 +788,15 @@ export default function HomeScreen() {
                           );
                         }}
                       >
-                        <Text style={styles.centerName}>{ev.center.name}</Text>
+                        <Text style={styles.centerName}>
+                          {ev.blocked ? "\u26A0 " : ""}
+                          {ev.center.name}
+                        </Text>
                         <Text style={styles.centerMeta}>
                           {ev.center.distanceKm.toFixed(1)} km ·{" "}
                           {ev.center.status}
                           {ev.route ? ` · ${ev.route.durationText}` : ""}
+                          {ev.blocked ? " · BLOCKED" : ""}
                         </Text>
                       </Pressable>
                     ))}
@@ -821,6 +846,51 @@ export default function HomeScreen() {
               </>
             )}
           </View>
+
+          {/* DEV: Signal override for testing typhoon mode */}
+          {__DEV__ ? (
+            <View style={styles.devCard}>
+              <Text style={styles.devTitle}>DEV: Force Signal</Text>
+              <View style={styles.devRow}>
+                {(
+                  [null, "MONITOR", "PREPARE", "LEAVE", "EVACUATE"] as const
+                ).map((s) => {
+                  const label = s ?? "Auto";
+                  const active = signalOverride === s;
+                  return (
+                    <Pressable
+                      key={label}
+                      style={[
+                        styles.devChip,
+                        active && styles.devChipActive,
+                        s && { borderColor: tokens.colors.severity[s] },
+                        active &&
+                          s && { backgroundColor: tokens.colors.severity[s] },
+                      ]}
+                      onPress={() => setSignalOverride(s)}
+                    >
+                      <Text
+                        style={[
+                          styles.devChipText,
+                          active && styles.devChipTextActive,
+                        ]}
+                      >
+                        {label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              {signalOverride ? (
+                <Text style={styles.devHint}>
+                  Signal forced to {signalOverride}. Typhoon mode:{" "}
+                  {["PREPARE", "LEAVE", "EVACUATE"].includes(signalOverride)
+                    ? "ON"
+                    : "OFF"}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
         </HomeFloatingPanel>
       ) : null}
 
@@ -1169,6 +1239,11 @@ const styles = StyleSheet.create({
     padding: tokens.spacing.sm,
     gap: 2,
   },
+  centerRowBlocked: {
+    opacity: 0.5,
+    borderWidth: 1,
+    borderColor: tokens.colors.danger,
+  },
   centerName: {
     color: tokens.colors.textPrimary,
     fontSize: tokens.type.body,
@@ -1195,43 +1270,50 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontStyle: "italic",
   },
-  geminiHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: tokens.spacing.sm,
-  },
-  aiBadge: {
-    backgroundColor: tokens.colors.ctaPrimary,
-    borderRadius: tokens.radius.pill,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  aiBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  geminiLoadingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: tokens.spacing.sm,
-  },
-  geminiResult: {
+  devCard: {
+    backgroundColor: "rgba(0,0,0,0.04)",
+    borderRadius: tokens.radius.md,
+    padding: tokens.spacing.sm,
     gap: tokens.spacing.xs,
+    borderWidth: 1,
+    borderColor: tokens.colors.border,
+    borderStyle: "dashed",
   },
-  geminiReason: {
-    color: tokens.colors.textSecondary,
-    fontSize: tokens.type.body,
-    fontStyle: "italic",
-    lineHeight: 20,
+  devTitle: {
+    color: tokens.colors.textDisabled,
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1,
   },
-  aiSourceRow: {
+  devRow: {
     flexDirection: "row",
-    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
   },
-  aiSourceText: {
-    color: tokens.colors.ctaPrimary,
+  devChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: tokens.radius.pill,
+    borderWidth: 1.5,
+    borderColor: tokens.colors.border,
+    backgroundColor: tokens.colors.background,
+  },
+  devChipActive: {
+    backgroundColor: tokens.colors.ctaPrimary,
+    borderColor: tokens.colors.ctaPrimary,
+  },
+  devChipText: {
+    color: tokens.colors.textSecondary,
     fontSize: 11,
     fontWeight: "600",
+  },
+  devChipTextActive: {
+    color: "#FFFFFF",
+  },
+  devHint: {
+    color: tokens.colors.textDisabled,
+    fontSize: 11,
+    fontStyle: "italic",
   },
 });

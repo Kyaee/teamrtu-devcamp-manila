@@ -6,6 +6,18 @@ import type {
 } from "@/src/types/ai";
 import type { EvacCenter } from "@/src/types/domain";
 
+export type CenterRiskContext = {
+  centerId: string;
+  blocked: boolean;
+  riskScore: number;
+  shortReason: string;
+};
+
+export type RiskContext = {
+  typhoonMode: boolean;
+  centerAnnotations: CenterRiskContext[];
+};
+
 const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY ?? "";
 const GEMINI_MODEL = "gemini-2.0-flash-lite";
 const BASE_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
@@ -55,14 +67,15 @@ function extractJson(raw: string): Record<string, unknown> {
 
 /**
  * Ask Gemini to choose the best evacuation center from nearby candidates.
- * Sends real GPS coordinates and distance data from Google Maps/Places.
- * Prioritizes proximity + open status + suitability as shelter.
+ * Sends real GPS coordinates, distance data, and flood/drain risk context.
+ * In typhoon mode, blocked centers are excluded from selection.
  * Falls back to nearest-by-distance if Gemini is unavailable or returns invalid.
  */
 export async function chooseCenterFromCandidates(
   userLat: number,
   userLng: number,
   candidates: EvacCenter[],
+  riskContext?: RiskContext,
 ): Promise<GeminiCenterChoice> {
   if (candidates.length === 0) {
     return {
@@ -72,7 +85,25 @@ export async function chooseCenterFromCandidates(
     };
   }
 
-  const nearest = candidates[0];
+  const safeCandidates = riskContext?.typhoonMode
+    ? candidates.filter((c) => {
+        const ann = riskContext.centerAnnotations.find(
+          (a) => a.centerId === c.id,
+        );
+        return !ann?.blocked;
+      })
+    : candidates;
+
+  if (safeCandidates.length === 0) {
+    return {
+      centerId: "",
+      reason:
+        "Lahat ng malapit na evacuation center ay naka-block dahil sa baha. Manatili sa ligtas na lugar.",
+      isFallback: true,
+    };
+  }
+
+  const nearest = safeCandidates[0];
   const fallback: GeminiCenterChoice = {
     centerId: nearest.id,
     reason: `Pinakamalapit na sentro: ${nearest.name} (${nearest.distanceKm.toFixed(1)} km).`,
@@ -81,25 +112,36 @@ export async function chooseCenterFromCandidates(
 
   if (!hasApiKey()) return fallback;
 
-  const candidateList = candidates
+  const annotations = riskContext?.centerAnnotations ?? [];
+
+  const candidateList = safeCandidates
     .slice(0, 8)
-    .map(
-      (c, i) =>
-        `${i + 1}. ID: "${c.id}" | Name: "${c.name}" | Type: ${c.barangay} | Distance: ${c.distanceKm.toFixed(2)} km | Status: ${c.status} | Address: ${c.address || "N/A"}`,
-    )
+    .map((c, i) => {
+      const ann = annotations.find((a) => a.centerId === c.id);
+      const riskInfo = ann
+        ? ` | Risk: ${ann.riskScore}/100 (${ann.shortReason})`
+        : "";
+      return `${i + 1}. ID: "${c.id}" | Name: "${c.name}" | Type: ${c.barangay} | Distance: ${c.distanceKm.toFixed(2)} km | Status: ${c.status} | Address: ${c.address || "N/A"}${riskInfo}`;
+    })
     .join("\n");
+
+  const typhoonClause = riskContext?.typhoonMode
+    ? "\nIMPORTANT: There is an active typhoon/heavy rain event. Prioritize SAFETY over distance. Avoid centers with high risk scores. Centers with confirmed flooding nearby have already been removed from this list."
+    : "";
 
   const prompt = `You are an emergency flood evacuation assistant for Metro Manila, Philippines.
 The user is at GPS coordinates: latitude ${userLat.toFixed(6)}, longitude ${userLng.toFixed(6)}.
 These are the nearest potential evacuation shelters discovered via Google Maps and local databases:
 
 ${candidateList}
+${typhoonClause}
 
 Choose the BEST evacuation center for this user. Consider:
 1. Distance (closer is better for flood emergencies)
 2. Facility type (schools and government buildings are preferred shelters)
 3. Status ("open" is preferred over "limited")
 4. Suitability as an actual evacuation center (hospitals are good, malls are last resort)
+5. Flood/drain risk near the center (lower risk score is better)
 
 Respond ONLY with a valid JSON object in this exact format (no markdown, no explanation outside JSON):
 {"centerId": "<exact id of chosen center>", "reason": "<1-2 sentence explanation in Filipino/Tagalog why this is the best choice>"}`;
@@ -109,7 +151,7 @@ Respond ONLY with a valid JSON object in this exact format (no markdown, no expl
     const parsed = extractJson(raw);
     const chosenId = typeof parsed.centerId === "string" ? parsed.centerId : "";
     const reason = typeof parsed.reason === "string" ? parsed.reason : "";
-    const isValid = candidates.some((c) => c.id === chosenId);
+    const isValid = safeCandidates.some((c) => c.id === chosenId);
 
     if (!isValid || !chosenId) return fallback;
 

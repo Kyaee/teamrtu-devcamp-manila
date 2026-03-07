@@ -81,3 +81,11 @@ export type DrainReportInsert = {
   description: string;
   status?: "pending" | "confirmed";
 };
+
+/** Row returned by the `nearby_report_summary` RPC function */
+export type NearbyReportSummaryRow = {
+  flood_pending_count: number;
+  flood_confirmed_count: number;
+  flood_confirmed_high_count: number;
+  drain_count: number;
+};

@@ -1,7 +1,14 @@
 import type { Severity } from "@/src/design/tokens";
 import type { RouteResult } from "@/src/services/maps";
-import type { EvacCenter, FloodReport } from "@/src/types/domain";
+import type { DrainReport, EvacCenter, FloodReport } from "@/src/types/domain";
 import type { WeatherData } from "@/src/types/weather";
+
+import {
+  RISK_POLICY,
+  type CenterRiskAnnotation,
+  annotateCenterRisk,
+  isTyphoonMode,
+} from "./risk-policy";
 
 const SEVERITY_WEIGHTS: Record<Severity, number> = {
   MONITOR: 0,
@@ -101,7 +108,8 @@ export function scoreRouteRisk(
       (r) =>
         r.status === "confirmed" &&
         HIGH_DEPTH_LEVELS.has(r.depth) &&
-        haversineDist(point.latitude, point.longitude, r.lat, r.lng) < 0.15,
+        haversineDist(point.latitude, point.longitude, r.lat, r.lng) <
+          RISK_POLICY.floodProximityKm,
     );
     if (nearbyHigh) hazardPoints++;
   }
@@ -130,4 +138,84 @@ export function scoreCenterReadiness(center: EvacCenter): {
     ` — ${center.distanceKm.toFixed(1)} km away`;
 
   return { score: Math.min(score, 100), reason };
+}
+
+// ---------------------------------------------------------------------------
+// Route-level block evidence (walks the polyline checking flood proximity)
+// ---------------------------------------------------------------------------
+
+export type RouteBlockEvidence = {
+  hazardPoints: number;
+  totalPoints: number;
+  blocked: boolean;
+  reason: string;
+};
+
+export function evaluateRouteBlock(
+  route: RouteResult | null,
+  floodReports: FloodReport[],
+  typhoonActive: boolean,
+): RouteBlockEvidence {
+  if (!route || route.polyline.length === 0) {
+    return {
+      hazardPoints: 0,
+      totalPoints: 0,
+      blocked: false,
+      reason: "No route to evaluate",
+    };
+  }
+
+  const confirmed = floodReports.filter(
+    (r) => r.status === "confirmed" && HIGH_DEPTH_LEVELS.has(r.depth),
+  );
+
+  const proximityKm = RISK_POLICY.floodProximityKm;
+  const blockMin = RISK_POLICY.floodBlockMinCount;
+
+  let hazardPoints = 0;
+  let passesFloodCluster = false;
+
+  for (const point of route.polyline) {
+    const nearbyCount = confirmed.filter(
+      (r) =>
+        haversineDist(point.latitude, point.longitude, r.lat, r.lng) <
+        proximityKm,
+    ).length;
+
+    if (nearbyCount > 0) hazardPoints++;
+    if (nearbyCount >= blockMin) passesFloodCluster = true;
+  }
+
+  const blocked = typhoonActive && passesFloodCluster;
+
+  const reason = blocked
+    ? `Route BLOCKED: passes through area with ${blockMin}+ confirmed high-depth flood reports`
+    : hazardPoints > 0
+      ? `${hazardPoints} route points near high water (passable)`
+      : `Route clear (${route.distanceText}, ${route.durationText})`;
+
+  return { hazardPoints, totalPoints: route.polyline.length, blocked, reason };
+}
+
+// ---------------------------------------------------------------------------
+// Batch annotation helper for a list of centers
+// ---------------------------------------------------------------------------
+
+export function annotateAllCenters(
+  centers: EvacCenter[],
+  floodReports: FloodReport[],
+  drainReports: DrainReport[],
+  signal: Severity,
+): CenterRiskAnnotation[] {
+  const typhoonActive = isTyphoonMode(signal);
+  return centers.map((c) =>
+    annotateCenterRisk(
+      c.id,
+      c.lat,
+      c.lng,
+      floodReports,
+      drainReports,
+      typhoonActive,
+    ),
+  );
 }

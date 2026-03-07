@@ -152,6 +152,86 @@ export async function getRouteGuidance(
   }
 }
 
+/**
+ * Request multiple route alternatives from Google Directions API.
+ * Returns up to 3 routes (Google's maximum for alternatives).
+ */
+export async function getRouteAlternatives(
+  from: LatLng,
+  to: LatLng,
+  fromLabel = "Current location",
+  toLabel = "Evacuation center",
+  mode: "walking" | "driving" = "walking",
+): Promise<RouteResult[]> {
+  if (!API_KEY) {
+    throw new MapsServiceError(
+      "NO_API_KEY",
+      "Google Maps API key is not configured",
+    );
+  }
+
+  try {
+    const { data } = await axios.get(DIRECTIONS_URL, {
+      params: {
+        origin: `${from.latitude},${from.longitude}`,
+        destination: `${to.latitude},${to.longitude}`,
+        mode,
+        alternatives: true,
+        key: API_KEY,
+      },
+      timeout: 15000,
+    });
+
+    if (data.status !== "OK" || !data.routes?.length) {
+      throw new MapsServiceError(
+        "API_ERROR",
+        `Directions API error: ${data.status}${data.error_message ? ` — ${data.error_message}` : ""}`,
+      );
+    }
+
+    return data.routes.map(
+      (route: {
+        overview_polyline: { points: string };
+        legs: {
+          distance: { text: string };
+          duration: { text: string };
+          steps?: {
+            html_instructions: string;
+            distance: { text: string };
+            duration: { text: string };
+          }[];
+        }[];
+      }) => {
+        const leg = route.legs[0];
+        const polyline = decodePolyline(route.overview_polyline.points);
+        const steps: RouteStep[] = (leg.steps ?? []).map(
+          (s: {
+            html_instructions: string;
+            distance: { text: string };
+            duration: { text: string };
+          }) => ({
+            instruction: stripHtml(s.html_instructions),
+            distance: s.distance.text,
+            duration: s.duration.text,
+          }),
+        );
+        return {
+          polyline,
+          distanceText: leg.distance.text,
+          durationText: leg.duration.text,
+          steps,
+          fetchedAt: new Date().toISOString(),
+          fromLabel,
+          toLabel,
+        } satisfies RouteResult;
+      },
+    );
+  } catch (err) {
+    if (err instanceof MapsServiceError) throw err;
+    throw new MapsServiceError("NETWORK_ERROR", "Cannot reach Directions API");
+  }
+}
+
 export async function getCachedRoute(): Promise<RouteResult | null> {
   return readJson<RouteResult | null>(ROUTE_CACHE_KEY, null);
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import type { Severity } from "@/src/design/tokens";
 import type { WeatherData } from "@/src/types/weather";
@@ -10,8 +10,24 @@ import { deriveFloodSignal } from "@/src/services/weather-signal";
 const POLL_MS = 15 * 60 * 1000; // 15 minutes
 const CACHE_KEY = "agos:weather-data";
 
-export function useWeatherSignal(lat?: number, lng?: number) {
-  const [signal, setSignal] = useState<Severity>("MONITOR");
+const SEVERITY_RANK: Record<Severity, number> = {
+  MONITOR: 0,
+  PREPARE: 1,
+  LEAVE: 2,
+  EVACUATE: 3,
+};
+
+function maxSeverity(a: Severity, b: Severity): Severity {
+  return SEVERITY_RANK[a] >= SEVERITY_RANK[b] ? a : b;
+}
+
+export function useWeatherSignal(
+  lat?: number,
+  lng?: number,
+  alertSeverity?: Severity,
+) {
+  const [weatherSignal, setWeatherSignal] = useState<Severity>("MONITOR");
+  const [override, setOverride] = useState<Severity | null>(null);
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -22,7 +38,7 @@ export function useWeatherSignal(lat?: number, lng?: number) {
       const cached = await readJson<WeatherData | null>(CACHE_KEY, null);
       if (!cancelled && cached) {
         setWeather(cached);
-        setSignal(deriveFloodSignal(cached.current, cached.forecast));
+        setWeatherSignal(deriveFloodSignal(cached.current, cached.forecast));
         setLoading(false);
       }
 
@@ -35,7 +51,7 @@ export function useWeatherSignal(lat?: number, lng?: number) {
         const data = await getWeatherData(lat, lng);
         if (!cancelled) {
           setWeather(data);
-          setSignal(deriveFloodSignal(data.current, data.forecast));
+          setWeatherSignal(deriveFloodSignal(data.current, data.forecast));
           if (data.current || data.forecast.length > 0) {
             await writeJson(CACHE_KEY, data);
           }
@@ -59,5 +75,21 @@ export function useWeatherSignal(lat?: number, lng?: number) {
     };
   }, [lat, lng]);
 
-  return { signal, weather, loading };
+  const effectiveSignal: Severity = override
+    ? override
+    : alertSeverity
+      ? maxSeverity(weatherSignal, alertSeverity)
+      : weatherSignal;
+
+  const setSignalOverride = useCallback((s: Severity | null) => {
+    setOverride(s);
+  }, []);
+
+  return {
+    signal: effectiveSignal,
+    weather,
+    loading,
+    signalOverride: override,
+    setSignalOverride,
+  };
 }

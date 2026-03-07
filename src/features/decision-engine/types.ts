@@ -24,6 +24,7 @@ export type CenterEvaluation = {
   score: number;
   riskLevel: Severity;
   reasons: string[];
+  blocked?: boolean;
 };
 
 export type DecisionExplainability = {
