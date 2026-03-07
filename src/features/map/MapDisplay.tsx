@@ -29,6 +29,17 @@ export type RouteOverlay = {
   width?: number;
 };
 
+export type MapZone = {
+  id: string;
+  coordinates: { latitude: number; longitude: number }[];
+  fillColor: string;
+  strokeColor: string;
+  strokeWidth?: number;
+  tappable?: boolean;
+  title?: string;
+  description?: string;
+};
+
 export type MapDisplayRef = {
   animateToRegion: (region: MapRegion, duration?: number) => void;
 };
@@ -38,10 +49,12 @@ type MapDisplayProps = {
   markers: MapMarker[];
   routeOverlay?: RouteOverlay | null;
   polylines?: RouteOverlay[];
+  zones?: MapZone[];
   activeStepIndex?: number;
   showsMyLocationButton?: boolean;
   onRegionChangeComplete?: (region: MapRegion) => void;
   onMarkerPress?: (marker: MapMarker) => void;
+  onZonePress?: (zone: MapZone) => void;
 };
 
 const MapDisplay = forwardRef<MapDisplayRef, MapDisplayProps>(

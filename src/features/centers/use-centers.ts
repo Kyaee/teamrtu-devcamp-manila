@@ -87,6 +87,9 @@ export function useCenters(userLat?: number, userLng?: number) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const lat = userLat ?? 14.6308;
+  const lng = userLng ?? 121.1023;
+
   useEffect(() => {
     if (userLat === undefined || userLng === undefined) return;
 
@@ -145,7 +148,7 @@ export function useCenters(userLat?: number, userLng?: number) {
     return () => {
       cancelled = true;
     };
-  }, [userLat, userLng]);
+  }, [lat, lng]);
 
   const centers = useMemo<EvacCenter[]>(() => {
     if (!openOnly) return allCenters;

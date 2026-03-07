@@ -1,7 +1,11 @@
 import { useMemo } from "react";
 
 import { getCityCentroid } from "@/src/services/geocoding";
-import type { MapMarker } from "./MapDisplay";
+
+import {
+  findBoundaryByCity,
+  type CityBoundary,
+} from "./data/metro-manila-boundaries";
 
 export type HazardLevel = "Low" | "Medium" | "MediumHigh" | "High";
 
@@ -17,11 +21,29 @@ export type FloodCoverageEntry = {
   lng: number;
 };
 
+export type FloodZone = {
+  id: string;
+  city: string;
+  hazardLevel: HazardLevel;
+  fillColor: string;
+  strokeColor: string;
+  coordinates: { latitude: number; longitude: number }[];
+  center: { latitude: number; longitude: number };
+  description: string;
+};
+
 const HAZARD_COLORS: Record<HazardLevel, string> = {
   Low: "#22C55E",
   Medium: "#EAB308",
   MediumHigh: "#F97316",
   High: "#EF4444",
+};
+
+const HAZARD_FILL_COLORS: Record<HazardLevel, string> = {
+  Low: "rgba(34,197,94,0.22)",
+  Medium: "rgba(234,179,8,0.22)",
+  MediumHigh: "rgba(249,115,22,0.25)",
+  High: "rgba(239,68,68,0.28)",
 };
 
 const HAZARD_LABELS: Record<HazardLevel, string> = {
@@ -235,28 +257,32 @@ function getEntries(): FloodCoverageEntry[] {
   return _cachedEntries;
 }
 
+function buildZones(entries: FloodCoverageEntry[]): FloodZone[] {
+  const zones: FloodZone[] = [];
+  for (const e of entries) {
+    const boundary: CityBoundary | undefined = findBoundaryByCity(e.city);
+    if (!boundary) continue;
+    zones.push({
+      id: `zone-${e.city}`,
+      city: e.city,
+      hazardLevel: e.hazardLevel,
+      fillColor: HAZARD_FILL_COLORS[e.hazardLevel],
+      strokeColor: HAZARD_COLORS[e.hazardLevel],
+      coordinates: boundary.coordinates,
+      center: boundary.center,
+      description: `Flood: ${HAZARD_LABELS[e.hazardLevel]} · Surge: ${e.stormSurge} · ${e.areaKm2} km²`,
+    });
+  }
+  return zones;
+}
+
 export function useFloodCoverage(): {
   entries: FloodCoverageEntry[];
-  markers: MapMarker[];
+  zones: FloodZone[];
 } {
   const entries = getEntries();
-
-  const markers: MapMarker[] = useMemo(
-    () =>
-      entries.map((e) => ({
-        id: `flood-${e.city}`,
-        latitude: e.lat,
-        longitude: e.lng,
-        pinColor: HAZARD_COLORS[e.hazardLevel],
-        opacity: 0.85,
-        title: e.city,
-        description: `Flood: ${HAZARD_LABELS[e.hazardLevel]} · Surge: ${e.stormSurge} · ${e.areaKm2} km²`,
-        category: "flood" as const,
-      })),
-    [entries],
-  );
-
-  return { entries, markers };
+  const zones: FloodZone[] = useMemo(() => buildZones(entries), [entries]);
+  return { entries, zones };
 }
 
 export { HAZARD_COLORS, HAZARD_LABELS };

@@ -21,7 +21,11 @@ import { useEvacuationDecision } from "@/src/features/decision-engine/use-evacua
 import { HomeFloatingPanel } from "@/src/features/home/HomeFloatingPanel";
 import { DPWHProjectPanel } from "@/src/features/map/DPWHProjectPanel";
 import { LocationSearchBar } from "@/src/features/map/LocationSearchBar";
-import type { MapDisplayRef, MapMarker } from "@/src/features/map/MapDisplay";
+import type {
+  MapDisplayRef,
+  MapMarker,
+  MapZone,
+} from "@/src/features/map/MapDisplay";
 import MapDisplay from "@/src/features/map/MapDisplay";
 import { useDpwhProjects } from "@/src/features/map/use-dpwh-projects";
 import {
@@ -113,6 +117,9 @@ function ForecastRow({ entry }: { entry: HourlyForecastEntry }) {
   );
 }
 
+const DIRE_MARKER_ID = "dire-user-pin";
+const PANEL_COLLAPSED = 120;
+
 export default function HomeScreen() {
   const router = useRouter();
   const { isConnected } = useConnectivity();
@@ -139,7 +146,7 @@ export default function HomeScreen() {
     evaluate: runDecision,
   } = useEvacuationDecision();
 
-  const { entries: floodEntries, markers: floodMarkers } = useFloodCoverage();
+  const { entries: floodEntries, zones: floodZones } = useFloodCoverage();
   const { markers: dpwhMarkers, getProjectById } = useDpwhProjects();
   const streetHighlights = useFloodStreetHighlights(floodEntries);
 
@@ -149,6 +156,9 @@ export default function HomeScreen() {
   const [selectedDpwhId, setSelectedDpwhId] = useState<string | null>(null);
   const mapRef = useRef<MapDisplayRef>(null);
   const [searchMarker, setSearchMarker] = useState<MapMarker | null>(null);
+  const [direMarker, setDireMarker] = useState<MapMarker | null>(null);
+  const [direSending, setDireSending] = useState(false);
+  const [direActive, setDireActive] = useState(false);
 
   const signalColor = tokens.colors.severity[signal];
   const current = weather?.current ?? null;
@@ -174,6 +184,30 @@ export default function HomeScreen() {
     }
   }, []);
 
+  const handleZonePress = useCallback((zone: MapZone) => {
+    const coords = zone.coordinates;
+    if (coords.length === 0) return;
+    let minLat = coords[0].latitude;
+    let maxLat = coords[0].latitude;
+    let minLng = coords[0].longitude;
+    let maxLng = coords[0].longitude;
+    for (const c of coords) {
+      if (c.latitude < minLat) minLat = c.latitude;
+      if (c.latitude > maxLat) maxLat = c.latitude;
+      if (c.longitude < minLng) minLng = c.longitude;
+      if (c.longitude > maxLng) maxLng = c.longitude;
+    }
+    mapRef.current?.animateToRegion(
+      {
+        latitude: (minLat + maxLat) / 2,
+        longitude: (minLng + maxLng) / 2,
+        latitudeDelta: (maxLat - minLat) * 1.3,
+        longitudeDelta: (maxLng - minLng) * 1.3,
+      },
+      600,
+    );
+  }, []);
+
   const handleSearchSelect = useCallback((place: PlaceLocation) => {
     const region = {
       latitude: place.latitude,
@@ -191,6 +225,41 @@ export default function HomeScreen() {
       title: place.name,
       description: place.address,
     });
+  }, []);
+
+  const handleDireSituation = useCallback(async () => {
+    setDireSending(true);
+    setDireMarker({
+      id: DIRE_MARKER_ID,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      pinColor: tokens.colors.danger,
+      opacity: 1,
+      title: "I need help!",
+      description: "Dire situation reported at this location",
+    });
+    mapRef.current?.animateToRegion(
+      {
+        latitude: location.latitude,
+        longitude: location.longitude,
+        latitudeDelta: 0.005,
+        longitudeDelta: 0.005,
+      },
+      500,
+    );
+    await addFloodReport(
+      "chest",
+      isConnected,
+      location.latitude,
+      location.longitude,
+    );
+    setDireSending(false);
+    setDireActive(true);
+  }, [addFloodReport, isConnected, location]);
+
+  const handleSafeNow = useCallback(() => {
+    setDireMarker(null);
+    setDireActive(false);
   }, []);
 
   const handleEvaluate = useCallback(() => {
@@ -235,22 +304,29 @@ export default function HomeScreen() {
         pinColor: tokens.colors.safe,
         opacity: 1,
         title: c.name,
-        description: `${c.status.toUpperCase()} — ${c.distanceKm} km`,
+        description: `${c.status.toUpperCase()} \u2014 ${c.distanceKm} km`,
         category: "center",
       });
     }
-    if (showFloodLayer) result.push(...floodMarkers);
     if (showDpwhLayer) result.push(...dpwhMarkers);
     if (searchMarker) result.push(searchMarker);
+    if (direMarker) result.push(direMarker);
     return result;
-  }, [
-    centers,
-    searchMarker,
-    floodMarkers,
-    dpwhMarkers,
-    showFloodLayer,
-    showDpwhLayer,
-  ]);
+  }, [centers, searchMarker, dpwhMarkers, showDpwhLayer, direMarker]);
+
+  const zones: MapZone[] = useMemo(() => {
+    if (!showFloodLayer) return [];
+    return floodZones.map((z) => ({
+      id: z.id,
+      coordinates: z.coordinates,
+      fillColor: z.fillColor,
+      strokeColor: z.strokeColor,
+      strokeWidth: 2,
+      tappable: true,
+      title: z.city,
+      description: z.description,
+    }));
+  }, [showFloodLayer, floodZones]);
 
   const polylines = useMemo(
     () => (showFloodLayer ? streetHighlights : []),
@@ -263,10 +339,12 @@ export default function HomeScreen() {
         ref={mapRef}
         initialRegion={initialRegion}
         markers={markers}
+        zones={zones}
         polylines={polylines}
         routeOverlay={routeOverlay}
         showsMyLocationButton={false}
         onMarkerPress={handleMarkerPress}
+        onZonePress={handleZonePress}
       />
 
       <SafeAreaView
@@ -280,16 +358,6 @@ export default function HomeScreen() {
               {isConnected ? "Online" : "Offline"}
             </Text>
           </View>
-
-          {!weatherLoading ? (
-            <View
-              style={[styles.signalBadge, { backgroundColor: signalColor }]}
-            >
-              <Text style={styles.signalBadgeText}>
-                {SIGNAL_LABELS[signal]}
-              </Text>
-            </View>
-          ) : null}
         </View>
 
         <LocationSearchBar
@@ -317,112 +385,132 @@ export default function HomeScreen() {
         )}
       </SafeAreaView>
 
-      <View style={styles.mapControlsWrap} pointerEvents="box-none">
-        <Pressable
-          style={styles.gpsLabel}
-          onPress={() => {
-            mapRef.current?.animateToRegion(
-              {
-                latitude: location.latitude,
-                longitude: location.longitude,
-                latitudeDelta: 0.02,
-                longitudeDelta: 0.02,
-              },
-              600,
-            );
-          }}
-        >
-          <Text style={styles.gpsLabelIcon}>{"\u2316"}</Text>
-          <Text style={styles.gpsLabelText}>My Location</Text>
-        </Pressable>
+      {legendVisible ? (
+        <View style={styles.legend} pointerEvents="box-none">
+          <Text style={styles.legendTitle}>Map Legend</Text>
+          <View style={styles.legendRow}>
+            <View
+              style={[
+                styles.legendDot,
+                { backgroundColor: tokens.colors.safe },
+              ]}
+            />
+            <Text style={styles.legendLabel}>Evacuation Center</Text>
+          </View>
 
-        <Pressable
-          style={styles.legendToggle}
-          onPress={() => setLegendVisible((v) => !v)}
-        >
-          <Text style={styles.legendToggleText}>Legend</Text>
-        </Pressable>
-
-        {legendVisible ? (
-          <View style={styles.legend}>
-            <Text style={styles.legendTitle}>Map Legend</Text>
-            <View style={styles.legendRow}>
+          <Text style={styles.legendTitle}>Flood Depth Reports</Text>
+          {depthButtons.map((d) => (
+            <View key={d.id} style={styles.legendRow}>
               <View
                 style={[
                   styles.legendDot,
-                  { backgroundColor: tokens.colors.safe },
+                  { backgroundColor: DEPTH_COLORS[d.id] },
                 ]}
               />
-              <Text style={styles.legendLabel}>Evacuation Center</Text>
+              <Text style={styles.legendLabel}>{d.label}</Text>
             </View>
+          ))}
 
-            <Text style={styles.legendTitle}>Flood Depth Reports</Text>
-            {depthButtons.map((d) => (
-              <View key={d.id} style={styles.legendRow}>
-                <View
-                  style={[
-                    styles.legendDot,
-                    { backgroundColor: DEPTH_COLORS[d.id] },
-                  ]}
-                />
-                <Text style={styles.legendLabel}>{d.label}</Text>
-              </View>
-            ))}
-
-            <Pressable
-              onPress={() => setShowFloodLayer(!showFloodLayer)}
-              style={styles.layerToggle}
-            >
+          <Pressable
+            onPress={() => setShowFloodLayer((v) => !v)}
+            style={styles.layerToggle}
+          >
+            <View
+              style={[
+                styles.toggleIndicator,
+                showFloodLayer && styles.toggleActive,
+              ]}
+            />
+            <Text style={styles.legendTitle}>City Flood Hazard Zones</Text>
+          </Pressable>
+          {(["High", "MediumHigh", "Medium", "Low"] as const).map((level) => (
+            <View key={level} style={styles.legendRow}>
               <View
                 style={[
-                  styles.toggleIndicator,
-                  showFloodLayer && styles.toggleActive,
+                  styles.legendDot,
+                  { backgroundColor: HAZARD_COLORS[level] },
                 ]}
               />
-              <Text style={styles.legendTitle}>City Flood Hazard</Text>
-            </Pressable>
-            {(["High", "MediumHigh", "Medium", "Low"] as const).map((level) => (
-              <View key={level} style={styles.legendRow}>
-                <View
-                  style={[
-                    styles.legendDot,
-                    { backgroundColor: HAZARD_COLORS[level] },
-                  ]}
-                />
-                <Text style={styles.legendLabel}>{HAZARD_LABELS[level]}</Text>
-              </View>
-            ))}
+              <Text style={styles.legendLabel}>{HAZARD_LABELS[level]}</Text>
+            </View>
+          ))}
 
-            <Pressable
-              onPress={() => setShowDpwhLayer(!showDpwhLayer)}
-              style={styles.layerToggle}
-            >
-              <View
-                style={[
-                  styles.toggleIndicator,
-                  showDpwhLayer && styles.toggleActive,
-                ]}
-              />
-              <Text style={styles.legendTitle}>DPWH Projects</Text>
-            </Pressable>
-            <View style={styles.legendRow}>
-              <View
-                style={[styles.legendDot, { backgroundColor: "#3B82F6" }]}
-              />
-              <Text style={styles.legendLabel}>On-Going</Text>
-            </View>
-            <View style={styles.legendRow}>
-              <View
-                style={[styles.legendDot, { backgroundColor: "#6B7280" }]}
-              />
-              <Text style={styles.legendLabel}>Completed</Text>
-            </View>
+          <Pressable
+            onPress={() => setShowDpwhLayer((v) => !v)}
+            style={styles.layerToggle}
+          >
+            <View
+              style={[
+                styles.toggleIndicator,
+                showDpwhLayer && styles.toggleActive,
+              ]}
+            />
+            <Text style={styles.legendTitle}>DPWH Projects</Text>
+          </Pressable>
+          <View style={styles.legendRow}>
+            <View style={[styles.legendDot, { backgroundColor: "#3B82F6" }]} />
+            <Text style={styles.legendLabel}>On-Going</Text>
           </View>
-        ) : null}
-      </View>
+          <View style={styles.legendRow}>
+            <View style={[styles.legendDot, { backgroundColor: "#6B7280" }]} />
+            <Text style={styles.legendLabel}>Completed</Text>
+          </View>
+        </View>
+      ) : null}
 
       {!selectedProject ? (
-        <HomeFloatingPanel expandedHeight={520} collapsedHeight={120}>
+        <HomeFloatingPanel
+          expandedHeight={560}
+          collapsedHeight={120}
+          header={
+            <View style={styles.panelHeaderRow}>
+              <Pressable
+                style={styles.gpsButton}
+                onPress={() => {
+                  mapRef.current?.animateToRegion(
+                    {
+                      latitude: location.latitude,
+                      longitude: location.longitude,
+                      latitudeDelta: 0.02,
+                      longitudeDelta: 0.02,
+                    },
+                    600,
+                  );
+                }}
+              >
+                <Text style={styles.gpsButtonIcon}>{"\u2316"}</Text>
+                <Text style={styles.gpsButtonText}>My Location</Text>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.legendButton,
+                  legendVisible && styles.legendButtonActive,
+                ]}
+                onPress={() => setLegendVisible((v) => !v)}
+              >
+                <Text
+                  style={[
+                    styles.legendButtonText,
+                    legendVisible && styles.legendButtonTextActive,
+                  ]}
+                >
+                  {legendVisible ? "Hide Legend" : "Legend"}
+                </Text>
+              </Pressable>
+
+              {!weatherLoading ? (
+                <View
+                  style={[styles.signalBadge, { backgroundColor: signalColor }]}
+                >
+                  <Text style={styles.signalBadgeText}>
+                    {SIGNAL_LABELS[signal]}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          }
+        >
           {/* Panahon card */}
           <View
             style={[styles.card, { borderWidth: 1, borderColor: signalColor }]}
@@ -437,8 +525,11 @@ export default function HomeScreen() {
                       {"\u00B0"}C — {current.weatherCondition.description.text}
                     </Text>
                     <Text style={styles.cardSub}>
-                      Rain {current.precipitation?.probability?.percent ?? 0}% ·{" "}
-                      {(current.precipitation?.qpf?.quantity ?? 0).toFixed(1)}{" "}
+                      Rain {current.precipitation?.probability?.percent ?? 0}%
+                      {" · "}
+                      {(current.precipitation?.qpf?.quantity ?? 0).toFixed(
+                        1,
+                      )}{" "}
                       mm/h
                     </Text>
                   </>
@@ -684,6 +775,7 @@ const styles = StyleSheet.create({
     paddingTop: tokens.spacing.xs,
   },
   statusBadge: {
+    flex: 1,
     backgroundColor: "rgba(255,255,255,0.92)",
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -706,9 +798,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  alertPanel: {
-    marginTop: 4,
-  },
+  alertPanel: { marginTop: 4 },
   alertPanelInactive: {
     backgroundColor: "rgba(255,255,255,0.92)",
     borderRadius: tokens.radius.lg,
@@ -726,57 +816,59 @@ const styles = StyleSheet.create({
     fontSize: tokens.type.body,
   },
 
-  mapControlsWrap: {
-    position: "absolute",
-    bottom: "48%",
-    right: tokens.spacing.sm,
-    zIndex: 11,
-    alignItems: "flex-end",
-    gap: tokens.spacing.xs,
-  },
-  gpsLabel: {
+  panelHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(255,255,255,0.96)",
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: tokens.radius.sm,
-    boxShadow: "0 1px 4px rgba(0,0,0,0.14)",
-    borderCurve: "continuous",
+    gap: tokens.spacing.sm,
+    paddingHorizontal: tokens.spacing.md,
+    paddingBottom: tokens.spacing.sm,
   },
-  gpsLabelIcon: {
-    fontSize: 16,
-    color: tokens.colors.ctaPrimary,
-  },
-  gpsLabelText: {
-    color: tokens.colors.textPrimary,
-    fontSize: tokens.type.label,
-    fontWeight: "600",
-  },
-  legendToggle: {
-    backgroundColor: "rgba(255,255,255,0.92)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: tokens.radius.sm,
-    boxShadow: "0 1px 4px rgba(0,0,0,0.12)",
-    borderCurve: "continuous",
-  },
-  legendToggleText: {
-    color: tokens.colors.textPrimary,
-    fontSize: tokens.type.label,
-    fontWeight: "600",
-  },
-  legend: {
-    marginTop: 4,
-    backgroundColor: "rgba(255,255,255,0.96)",
+  gpsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: tokens.colors.surfaceAlt,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderRadius: tokens.radius.md,
-    padding: tokens.spacing.sm,
+    borderCurve: "continuous",
+  },
+  gpsButtonIcon: { fontSize: 18, color: tokens.colors.ctaPrimary },
+  gpsButtonText: {
+    color: tokens.colors.textPrimary,
+    fontSize: tokens.type.label,
+    fontWeight: "700",
+  },
+  legendButton: {
+    backgroundColor: tokens.colors.surfaceAlt,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: tokens.radius.md,
+    borderCurve: "continuous",
+    justifyContent: "center",
+  },
+  legendButtonActive: { backgroundColor: tokens.colors.ctaPrimary },
+  legendButtonText: {
+    color: tokens.colors.textPrimary,
+    fontSize: tokens.type.label,
+    fontWeight: "700",
+  },
+  legendButtonTextActive: { color: "#FFFFFF" },
+
+  legend: {
+    position: "absolute",
+    bottom: PANEL_COLLAPSED + tokens.spacing.md,
+    left: tokens.spacing.sm,
+    zIndex: 12,
+    backgroundColor: "rgba(255,255,255,0.98)",
+    borderRadius: tokens.radius.md,
+    padding: tokens.spacing.md,
     gap: 4,
     borderWidth: 1,
     borderColor: tokens.colors.border,
-    boxShadow: "0 2px 8px rgba(0,0,0,0.10)",
+    boxShadow: "0 4px 16px rgba(0,0,0,0.14)",
     borderCurve: "continuous",
+    maxWidth: 220,
   },
   legendTitle: {
     color: tokens.colors.textPrimary,
@@ -877,6 +969,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   freshness: { color: tokens.colors.textDisabled, fontSize: 11 },
+
+  direButton: {
+    minHeight: 52,
+    borderRadius: tokens.radius.md,
+    backgroundColor: tokens.colors.danger,
+    alignItems: "center",
+    justifyContent: "center",
+    boxShadow: "0 2px 8px rgba(239,68,68,0.35)",
+    borderCurve: "continuous",
+  },
+  direButtonText: {
+    color: "#FFFFFF",
+    fontSize: tokens.type.body,
+    fontWeight: "700",
+  },
+  safeButton: {
+    minHeight: 52,
+    borderRadius: tokens.radius.md,
+    backgroundColor: tokens.colors.safe,
+    alignItems: "center",
+    justifyContent: "center",
+    boxShadow: "0 2px 8px rgba(34,197,94,0.35)",
+    borderCurve: "continuous",
+  },
+  safeButtonText: {
+    color: "#FFFFFF",
+    fontSize: tokens.type.body,
+    fontWeight: "700",
+  },
 
   actionBanner: {
     paddingHorizontal: 12,

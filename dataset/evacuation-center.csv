@@ -1,0 +1,92 @@
+No.,City,Evacuation Center Name,Barangay,Notes,Latitude,Longitude
+1,Manila,Building 3,Barangay 128,,14.5978,120.9767
+2,Manila,Building 18,Barangay 128,,14.5978,120.9767
+3,Manila,TCI,Barangay 128,,14.5978,120.9770
+4,Manila,Almario Elementary School,Barangay 20,,14.6015,120.9822
+5,Manila,Baseco Evacuation Center,Barangay 649,,14.5783,120.9661
+6,Manila,Barangay 105 Covered Court,Barangay 105,,14.5950,120.9750
+7,Manila,Barangay 101 Covered Court,Barangay 101,,14.5945,120.9745
+8,Quezon City,Marcel Covered Court,Barangay Pasong Tamo,,14.6466,121.0246
+9,Quezon City,Centre Ville Covered Court,Barangay Pasong Tamo,,14.6468,121.0248
+10,Quezon City,Pantranco Chapel,Barangay Pasong Tamo,,14.6471,121.0251
+11,Quezon City,Pingkian I Central Court,Barangay Pasong Tamo,,14.6462,121.0242
+12,Quezon City,Sarmiento Chapel,Barangay Pasong Tamo,,14.6465,121.0244
+13,Quezon City,Annex I Covered Court,Barangay Pasong Tamo,,14.6469,121.0247
+14,Quezon City,Annex 2 Covered Court,Barangay Pasong Tamo,,14.6472,121.0250
+15,Quezon City,Apolonio Samson Elementary School,Barangay Apolonio Samson,,14.6853,121.0106
+16,Caloocan City,Sampalukan Elementary,Barangay 24,,14.6530,120.9822
+17,Caloocan City,M.B. Asisto High School Main,Barangay 14,,14.6495,120.9780
+18,Caloocan City,Bagong Silang Elementary School,Barangay 119,,14.7530,121.0300
+19,Caloocan City,Llano Elementary School,Barangay 167,,14.7480,120.9850
+20,Caloocan City,Cades,Barangay 178,,14.7510,120.9870
+21,Caloocan City,Barangay 177 Evacuation Center,Barangay 177,,14.7515,120.9868
+22,Caloocan City,Barangay 178 Evacuation Center,Barangay 178,,14.7512,120.9872
+23,Caloocan City,Kalayaan Elementary School,Barangay 176,,14.7505,120.9862
+24,Caloocan City,Barangay 164 Evacuation Center,Barangay 164,,14.7490,120.9855
+25,Caloocan City,Barangay 160 Evacuation Center,Barangay 160,,14.7485,120.9850
+26,Caloocan City,Glorietta Evacuation Center,Barangay 187,,14.7625,121.0442
+27,Caloocan City,Pangarap Central Elementary School,Barangay 182,,14.7535,120.9880
+28,Caloocan City,MLQU Elementary School,Barangay 185,,14.7540,120.9885
+29,Marikina,St. Mary Elementary School,Nangka,,14.6450,121.1038
+30,Marikina,Fortune High School,Fortune,,14.6512,121.0940
+31,Marikina,Malanday Elementary School,Malanday,,14.6620,121.1100
+32,Marikina,Kalumpang Elementary School,Kalumpang,,14.6750,121.1050
+33,Marikina,Marikina Elementary School,Sta. Elena,,14.6297,121.0996
+34,Marikina,Leodegradio Elementary School,Tanong,,14.6700,121.1080
+35,Marikina,Parang Elementary School,Parang,,14.6350,121.1020
+36,Marikina,Parang High School,Parang,,14.6355,121.1025
+37,Marikina,SSS National High School,Concepcion Dos,,14.6310,121.1005
+38,Marikina,Concepcion Integrated School,Concepcion Uno,,14.6220,121.0950
+39,Marikina,Sto. Nino High School,Sto. Niño,,14.6325,121.1015
+40,Marikina,H. Bautista Elementary School,Concepcion Uno,,14.6290,121.1000
+41,Marikina,Marikina Heights HD,Marikina Heights,,14.6480,121.1150
+42,Marikina,San Roque Elementary School,San Roque,,14.6360,121.1030
+43,Marikina,Concepcion Elementary School,Concepcion Uno,,14.6215,121.0945
+44,Marikina,Tanong High School,Tanong,,14.6700,121.1082
+45,Marikina,Nangka Elementary School,Nangka,,14.6450,121.1035
+46,Marikina,Kap Moy Elementary School,Marikina Heights,,14.6455,121.1150
+47,Marikina,SSS Vill Elementary School,Concepcion Dos,,14.6310,121.1010
+48,Marikina,Sto. Nino Elementary School,Sto. Niño,,14.6330,121.1020
+49,Marikina,CIS Elementary School,Concepcion Uno,,14.6300,121.0995
+50,Marikina,Marikina Science HE,Marikina Heights,,14.6315,121.1008
+51,Marikina,JDLP High School,Fortune,,14.6500,121.0930
+52,Marikina,Fortune Elementary School,Fortune,,14.6518,121.0935
+53,Marikina,Marikina High School,Concepcion Uno,,14.6295,121.0992
+54,Marikina,Barangka Elementary School,Barangka,,14.6260,121.0970
+55,Marikina,Sta. Elena High School,Sta. Elena,,14.6195,121.0940
+56,Taguig City,Eusebio Elementary School,Barangay Wawa,,14.5155,121.0590
+57,Taguig City,Taguig Science,Barangay Wawa,,14.5158,121.0592
+58,Taguig City,Central Bicutan Covered Court,Barangay Central Bicutan,,14.5072,121.0512
+59,Taguig City,EM's Elementary School,Barangay Central Signal,,14.5205,121.0560
+60,Taguig City,Gat Andres Bonifacio,Barangay Fort Bonifacio,,14.5381,121.0497
+61,Taguig City,Diosdado Macapagal High School,Barangay Katuparan,,14.4985,121.0540
+62,Taguig City,Trade Center,Barangay Maharlika,,14.5120,121.0480
+63,Taguig City,Daanghari Elementary School,Barangay North Daanghari,,14.5012,121.0455
+64,Taguig City,Kapitan Eddie T. Reyes Integrated School,Barangay Pinagsama,,14.5200,121.0610
+65,Taguig City,Cardones Elementary School,Barangay South Signal,,14.5218,121.0562
+66,Taguig City,Bagong Tanyag Elementary School Main,Barangay Tanyag,,14.4920,121.0422
+67,Taguig City,Silangan Elementary School,Barangay Upper Bicutan,,14.5062,121.0525
+68,Taguig City,Tenement Elementary School,Barangay Western Bicutan,,14.5035,121.0502
+69,Taguig City,Bagong Tanyag Elementary School Annex A,Barangay South Daanghari,,14.4995,121.0445
+70,Taguig City,Bagong Tanyag Elementary School Annex B,Barangay South Daanghari,,14.4998,121.0448
+71,Taguig City,Day Care Center,Barangay South Daanghari,,14.5000,121.0450
+72,Taguig City,C.P. Sta. Teresa Elementary School,Barangay Bagumbayan,,14.5248,121.0618
+73,Taguig City,Taguig Integrated School,Barangay Bambang,,14.5160,121.0540
+74,Taguig City,Tipas Elementary School Annex,Barangay Calzada Tipas,,14.5078,121.0568
+75,Taguig City,Hagonoy Gym,Barangay Hagonoy,,14.5088,121.0575
+76,Taguig City,Katwiran Covered Court,Barangay Ibayo Tipas,,14.5092,121.0580
+77,Taguig City,McDo Bahay Bulilit,Barangay Ligid Tipas,,14.5068,121.0561
+78,Taguig City,RP. Cruz Elementary School,Barangay Lower Bicutan,,14.5055,121.0515
+79,Taguig City,Tipas Elementary School Annex,Barangay Palingon Tipas,,14.5082,121.0572
+80,Taguig City,Eusebio Elementary School,Barangay San Miguel,,14.5162,121.0588
+81,Taguig City,Taguig Integrated School,Barangay Sta. Ana & Tuktukan,,14.5170,121.0542
+82,Taguig City,Ususan Elementary School,Barangay Ususan,,14.4935,121.0432
+83,Taguig City,Cayetano Science High School,Barangay Ususan,,14.4938,121.0435
+84,Las Pinas City,Aldana Elementary School,Barangay Elias Aldana,,14.4380,120.9830
+85,Valenzuela City,Valenzuela National High School,Barangay Marulas,,14.7180,120.9735
+86,Pasay City,Barangay Dona Nena Evacuation Center,Maricaban,,14.5420,121.0025
+87,Muntinlupa City,Cupang Senior High School,Cupang,,14.3850,121.0442
+88,Muntinlupa City,Baywalk Covered Court,Bayanan,,14.3820,121.0430
+89,Muntinlupa City,Alabang Elementary School,Alabang,,14.3975,121.0480
+90,Navotas City,San Roque Elementary School,Barangay San Roque,,14.6652,120.9408
+91,Paranaque City,Palanyag Gym,Barangay San Dionisio,,14.4660,121.0120
