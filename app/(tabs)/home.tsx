@@ -349,16 +349,6 @@ export default function HomeScreen() {
               {isConnected ? "Online" : "Offline"}
             </Text>
           </View>
-
-          {!weatherLoading ? (
-            <View
-              style={[styles.signalBadge, { backgroundColor: signalColor }]}
-            >
-              <Text style={styles.signalBadgeText}>
-                {SIGNAL_LABELS[signal]}
-              </Text>
-            </View>
-          ) : null}
         </View>
 
         <LocationSearchBar
@@ -385,44 +375,6 @@ export default function HomeScreen() {
           </View>
         )}
       </SafeAreaView>
-
-      {/* Map controls — bottom row, above collapsed panel */}
-      <View style={styles.mapControlsRow} pointerEvents="box-none">
-        <Pressable
-          style={styles.gpsButton}
-          onPress={() => {
-            mapRef.current?.animateToRegion(
-              {
-                latitude: location.latitude,
-                longitude: location.longitude,
-                latitudeDelta: 0.02,
-                longitudeDelta: 0.02,
-              },
-              600,
-            );
-          }}
-        >
-          <Text style={styles.gpsButtonIcon}>{"\u2316"}</Text>
-          <Text style={styles.gpsButtonText}>My Location</Text>
-        </Pressable>
-
-        <Pressable
-          style={[
-            styles.legendButton,
-            legendVisible && styles.legendButtonActive,
-          ]}
-          onPress={() => setLegendVisible((v) => !v)}
-        >
-          <Text
-            style={[
-              styles.legendButtonText,
-              legendVisible && styles.legendButtonTextActive,
-            ]}
-          >
-            {legendVisible ? "Hide Legend" : "Legend"}
-          </Text>
-        </Pressable>
-      </View>
 
       {legendVisible ? (
         <View style={styles.legend} pointerEvents="box-none">
@@ -498,7 +450,58 @@ export default function HomeScreen() {
       ) : null}
 
       {!selectedProject ? (
-        <HomeFloatingPanel expandedHeight={560} collapsedHeight={120}>
+        <HomeFloatingPanel
+          expandedHeight={560}
+          collapsedHeight={120}
+          header={
+            <View style={styles.panelHeaderRow}>
+              <Pressable
+                style={styles.gpsButton}
+                onPress={() => {
+                  mapRef.current?.animateToRegion(
+                    {
+                      latitude: location.latitude,
+                      longitude: location.longitude,
+                      latitudeDelta: 0.02,
+                      longitudeDelta: 0.02,
+                    },
+                    600,
+                  );
+                }}
+              >
+                <Text style={styles.gpsButtonIcon}>{"\u2316"}</Text>
+                <Text style={styles.gpsButtonText}>My Location</Text>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.legendButton,
+                  legendVisible && styles.legendButtonActive,
+                ]}
+                onPress={() => setLegendVisible((v) => !v)}
+              >
+                <Text
+                  style={[
+                    styles.legendButtonText,
+                    legendVisible && styles.legendButtonTextActive,
+                  ]}
+                >
+                  {legendVisible ? "Hide Legend" : "Legend"}
+                </Text>
+              </Pressable>
+
+              {!weatherLoading ? (
+                <View
+                  style={[styles.signalBadge, { backgroundColor: signalColor }]}
+                >
+                  <Text style={styles.signalBadgeText}>
+                    {SIGNAL_LABELS[signal]}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          }
+        >
           {/* Panahon card */}
           <View
             style={[styles.card, { borderWidth: 1, borderColor: signalColor }]}
@@ -723,6 +726,7 @@ const styles = StyleSheet.create({
     paddingTop: tokens.spacing.xs,
   },
   statusBadge: {
+    flex: 1,
     backgroundColor: "rgba(255,255,255,0.92)",
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -763,27 +767,22 @@ const styles = StyleSheet.create({
     fontSize: tokens.type.body,
   },
 
-  mapControlsRow: {
-    position: "absolute",
-    bottom: PANEL_COLLAPSED + tokens.spacing.md,
-    left: tokens.spacing.sm,
-    right: tokens.spacing.sm,
-    zIndex: 11,
+  panelHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: tokens.spacing.sm,
+    paddingHorizontal: tokens.spacing.md,
+    paddingBottom: tokens.spacing.sm,
   },
   gpsButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: tokens.colors.surfaceAlt,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderRadius: tokens.radius.md,
-    boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
     borderCurve: "continuous",
-    minHeight: 44,
   },
   gpsButtonIcon: { fontSize: 18, color: tokens.colors.ctaPrimary },
   gpsButtonText: {
@@ -792,13 +791,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   legendButton: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: tokens.colors.surfaceAlt,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderRadius: tokens.radius.md,
-    boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
     borderCurve: "continuous",
-    minHeight: 44,
     justifyContent: "center",
   },
   legendButtonActive: { backgroundColor: tokens.colors.ctaPrimary },
@@ -811,7 +808,7 @@ const styles = StyleSheet.create({
 
   legend: {
     position: "absolute",
-    bottom: PANEL_COLLAPSED + tokens.spacing.md + 52,
+    bottom: PANEL_COLLAPSED + tokens.spacing.md,
     left: tokens.spacing.sm,
     zIndex: 12,
     backgroundColor: "rgba(255,255,255,0.98)",

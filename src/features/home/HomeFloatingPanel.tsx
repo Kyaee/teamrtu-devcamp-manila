@@ -19,6 +19,7 @@ type Props = {
   expandedHeight: number;
   collapsedHeight: number;
   children: React.ReactNode;
+  header?: React.ReactNode;
   containerStyle?: StyleProp<ViewStyle>;
 };
 
@@ -26,6 +27,7 @@ export function HomeFloatingPanel({
   expandedHeight,
   collapsedHeight,
   children,
+  header,
   containerStyle,
 }: Props) {
   const translateY = useSharedValue(0);
@@ -121,6 +123,8 @@ export function HomeFloatingPanel({
           </Animated.View>
         </Animated.View>
       </GestureDetector>
+
+      {header}
 
       <ScrollView
         ref={scrollRef}
