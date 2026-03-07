@@ -1,6 +1,7 @@
 import * as Location from "expo-location";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { getRouteVerbalContext } from "@/src/services/ai";
 import type { LatLng, RouteResult, RouteStep } from "@/src/services/maps";
 import { getCachedRoute, getRouteGuidance } from "@/src/services/maps";
 import {
@@ -213,7 +214,14 @@ export function useNavigationSession(
         errorMessage: null,
       }));
 
+      // Announce first step immediately, then enqueue Gemini reroute context
       announceStep(newRoute.steps, 0);
+      void getRouteVerbalContext(
+        destinationLabel,
+        newRoute.distanceText,
+        newRoute.durationText,
+        "reroute",
+      ).then((ctx) => speak(ctx.phrase, "warning"));
     } catch {
       const cached = await getCachedRoute();
       if (cached) {
@@ -295,8 +303,14 @@ export function useNavigationSession(
         isOffRoute: false,
       }));
 
-      speak(getLocalizedPhrase("uncertainty"), "normal");
+      // Announce first step immediately, then enqueue Gemini trip-start context
       announceStep(route.steps, 0);
+      void getRouteVerbalContext(
+        destinationLabel,
+        route.distanceText,
+        route.durationText,
+        "start",
+      ).then((ctx) => speak(ctx.phrase, "normal"));
 
       await startLocationWatch();
     } catch {
