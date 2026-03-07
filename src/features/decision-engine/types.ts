@@ -25,6 +25,8 @@ export type CenterEvaluation = {
   riskLevel: Severity;
   reasons: string[];
   blocked?: boolean;
+  /** True when the route to this center passes through a flooded area. */
+  flooded?: boolean;
 };
 
 export type DecisionExplainability = {

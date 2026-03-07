@@ -1,7 +1,7 @@
 import type { Severity } from "@/src/design/tokens";
-import { getRouteGuidance, type RouteResult } from "@/src/services/maps";
+import { getRouteGuidance } from "@/src/services/maps";
 
-import { isTyphoonMode, annotateCenterRisk } from "./risk-policy";
+import { annotateCenterRisk, isTyphoonMode } from "./risk-policy";
 import {
   evaluateRouteBlock,
   scoreCenterReadiness,
@@ -134,64 +134,79 @@ export async function buildEvacuationDecision(
   }
 
   // -----------------------------------------------------------------------
-  // Phase 2: Fetch a route ONLY for the top recommended center.
-  // This keeps the decision fast (1 API call instead of 5-10).
+  // Phase 2: Fetch routes for the top 3 recommended centers sequentially.
+  // Evaluate each route against flood pins and mark flooded ones so the UI
+  // can show red route lines.
   // -----------------------------------------------------------------------
-  const best = recommended[0];
-  if (best) {
+  const ROUTE_FETCH_COUNT = 3;
+  const topPicks = recommended.slice(0, ROUTE_FETCH_COUNT);
+
+  let routeFetched = false;
+  for (const pick of topPicks) {
     try {
       const route = await getRouteGuidance(
         userLocation,
-        { latitude: best.center.lat, longitude: best.center.lng },
+        { latitude: pick.center.lat, longitude: pick.center.lng },
         "Kasalukuyang lokasyon",
-        best.center.name,
+        pick.center.name,
       );
 
-      best.route = route;
+      pick.route = route;
 
-      // Re-evaluate route blocking for the chosen route
       const routeBlock = evaluateRouteBlock(route, floodReports, typhoonActive);
       const { score: routeRiskScore, reason: routeReason } = scoreRouteRisk(
         route,
         floodReports,
       );
 
-      best.reasons.unshift(routeReason);
+      pick.reasons.unshift(routeReason);
+
       if (routeBlock.blocked) {
-        best.reasons.unshift(routeBlock.reason);
-        best.blocked = true;
+        pick.reasons.unshift(
+          `⚠ FLOODED: ${routeBlock.reason.replace("Route BLOCKED: ", "")}`,
+        );
+        pick.flooded = true;
       }
 
-      // Update composite score now that we have route data
-      const { score: readinessScore } = scoreCenterReadiness(best.center);
-      const centerRisk = annotateCenterRisk(
-        best.center.id,
-        best.center.lat,
-        best.center.lng,
+      // Update composite score with real route data
+      const { score: readinessScore } = scoreCenterReadiness(pick.center);
+      const cRisk = annotateCenterRisk(
+        pick.center.id,
+        pick.center.lat,
+        pick.center.lng,
         floodReports,
         drainReports,
         typhoonActive,
       );
-      best.score = routeBlock.blocked
-        ? 999
-        : Math.min(
-            routeRiskScore * 0.4 +
-              readinessScore * 0.6 +
-              centerRisk.drain.softPenalty,
-            100,
-          );
-    } catch {
-      // Route unavailable — center is still recommended, navigate screen
-      // will fetch its own route independently.
+      pick.score = Math.min(
+        routeRiskScore * 0.4 + readinessScore * 0.6 + cRisk.drain.softPenalty,
+        100,
+      );
+      routeFetched = true;
+    } catch (err) {
+      console.warn(
+        "[DecisionEngine] Route fetch failed for",
+        pick.center.name,
+        err instanceof Error ? err.message : err,
+      );
     }
   }
 
-  const hasAnyRoute = recommended.some((e) => e.route !== null);
+  // NOTE: We do NOT re-sort here. The recommended list preserves its original
+  // distance-based ranking. The UI uses `navTarget` (first non-flooded center)
+  // to decide which center the navigate button points to.
+
+  const hasAnyRoute = routeFetched || recommended.some((e) => e.route !== null);
   const confidence = deriveConfidence(weatherScore, reportScore, hasAnyRoute);
 
-  const bestRoute = recommended[0]?.route;
+  const top3 = recommended.slice(0, 3);
+  const allFlooded = top3.length > 0 && top3.every((e) => e.flooded);
+  const bestPick = top3.find((e) => !e.flooded) ?? top3[0];
+  const bestRoute = bestPick?.route;
   const routeReason = bestRoute
-    ? `Best route: ${bestRoute.distanceText}, ${bestRoute.durationText}`
+    ? allFlooded
+      ? `Lahat ng ruta ay dumadaan sa baha. Pinakamalapit: ${bestRoute.distanceText}, ${bestRoute.durationText}`
+      : `Best route: ${bestRoute.distanceText}, ${bestRoute.durationText}`
     : recommended.length === 0
       ? "Lahat ng ruta ay naka-block dahil sa baha. Hintayin ang update."
       : "Route will be fetched when navigation starts";

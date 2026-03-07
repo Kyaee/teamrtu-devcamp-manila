@@ -4,10 +4,10 @@ import type { DrainReport, EvacCenter, FloodReport } from "@/src/types/domain";
 import type { WeatherData } from "@/src/types/weather";
 
 import {
-  RISK_POLICY,
-  type CenterRiskAnnotation,
   annotateCenterRisk,
   isTyphoonMode,
+  RISK_POLICY,
+  type CenterRiskAnnotation,
 } from "./risk-policy";
 
 const SEVERITY_WEIGHTS: Record<Severity, number> = {

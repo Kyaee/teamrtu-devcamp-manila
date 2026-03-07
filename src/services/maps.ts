@@ -148,7 +148,14 @@ export async function getRouteGuidance(
     return result;
   } catch (err) {
     if (err instanceof MapsServiceError) throw err;
-    throw new MapsServiceError("NETWORK_ERROR", "Cannot reach Directions API");
+    const detail =
+      err instanceof Error
+        ? `${err.message}${(err as any).code ? ` [${(err as any).code}]` : ""}`
+        : String(err);
+    throw new MapsServiceError(
+      "NETWORK_ERROR",
+      `Cannot reach Directions API: ${detail}`,
+    );
   }
 }
 

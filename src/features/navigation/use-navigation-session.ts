@@ -5,16 +5,16 @@ import type { Severity } from "@/src/design/tokens";
 import { getRouteVerbalContext } from "@/src/services/ai";
 import type { LatLng, RouteResult, RouteStep } from "@/src/services/maps";
 import { getCachedRoute, getRouteGuidance } from "@/src/services/maps";
-import type { FloodReport } from "@/src/types/domain";
 import {
   clearVoiceQueue,
   enqueueVoice,
   getLocalizedPhrase,
   stopSpeaking,
 } from "@/src/services/voice-navigation";
+import type { FloodReport } from "@/src/types/domain";
 
-import { closestPointOnPolyline, haversineMeters } from "./geo-utils";
 import { getFloodSafeRoute } from "./flood-safe-routing";
+import { closestPointOnPolyline, haversineMeters } from "./geo-utils";
 
 export type NavStatus =
   | "idle"
@@ -35,12 +35,15 @@ export type NavigationState = {
   errorMessage: string | null;
   isMuted: boolean;
   isOffRoute: boolean;
+  /** True when the active route passes through a flooded area. */
+  isFlooded: boolean;
 };
 
 const OFF_ROUTE_THRESHOLD_M = 50;
 const STEP_ADVANCE_THRESHOLD_M = 25;
 const ARRIVAL_THRESHOLD_M = 30;
 const LOCATION_UPDATE_INTERVAL_MS = 3000;
+const REROUTE_COOLDOWN_MS = 30_000; // Minimum 30s between reroutes
 
 export type FloodContext = {
   floodReports: FloodReport[];
@@ -62,6 +65,7 @@ export function useNavigationSession(
     errorMessage: null,
     isMuted: false,
     isOffRoute: false,
+    isFlooded: false,
   });
 
   const floodContextRef = useRef(floodContext);
@@ -70,6 +74,8 @@ export function useNavigationSession(
   const locationSubRef = useRef<Location.LocationSubscription | null>(null);
   const rerouteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeRef = useRef(false);
+  const reroutingRef = useRef(false); // in-flight guard
+  const lastRerouteRef = useRef(0); // timestamp of last reroute
 
   const speak = useCallback(
     (text: string, urgency: "normal" | "warning" | "critical" = "normal") => {
@@ -194,6 +200,13 @@ export function useNavigationSession(
   }, [handleLocationUpdate]);
 
   const reroute = useCallback(async () => {
+    // Guard: skip if already rerouting or on cooldown
+    if (reroutingRef.current) return;
+    const now = Date.now();
+    if (now - lastRerouteRef.current < REROUTE_COOLDOWN_MS) return;
+
+    reroutingRef.current = true;
+    lastRerouteRef.current = now;
     setState((prev) => ({ ...prev, status: "rerouting" }));
     speak(getLocalizedPhrase("rerouting"), "warning");
 
@@ -210,6 +223,7 @@ export function useNavigationSession(
 
       let newRoute: RouteResult;
       let floodWarning: string | null = null;
+      let flooded = false;
 
       const fc = floodContextRef.current;
       if (fc && fc.floodReports.length > 0) {
@@ -223,6 +237,14 @@ export function useNavigationSession(
         );
         newRoute = result.route;
         floodWarning = result.warning;
+        flooded = result.flooded;
+
+        if (flooded) {
+          speak(
+            "Babala: ang ruta ay dumadaan sa may baha. Mag-ingat.",
+            "warning",
+          );
+        }
       } else {
         newRoute = await getRouteGuidance(
           from,
@@ -241,6 +263,7 @@ export function useNavigationSession(
         etaText: newRoute.durationText,
         isOffRoute: false,
         errorMessage: floodWarning,
+        isFlooded: flooded,
       }));
 
       announceStep(newRoute.steps, 0);
@@ -269,6 +292,8 @@ export function useNavigationSession(
           errorMessage: "Hindi makuha ang ruta. Subukan muli.",
         }));
       }
+    } finally {
+      reroutingRef.current = false;
     }
   }, [destination, destinationLabel, speak, announceStep]);
 
@@ -308,6 +333,7 @@ export function useNavigationSession(
 
       let route: RouteResult;
       let floodWarning: string | null = null;
+      let flooded = false;
 
       const fc = floodContextRef.current;
       if (fc && fc.floodReports.length > 0) {
@@ -322,10 +348,12 @@ export function useNavigationSession(
           );
           route = result.route;
           floodWarning = result.warning;
-          if (result.allBlocked) {
+          flooded = result.flooded;
+
+          if (flooded) {
             speak(
-              "Babala: lahat ng ruta ay dumadaan sa may baha. Mag-ingat.",
-              "critical",
+              "Babala: ang ruta ay dumadaan sa may baha. Mag-ingat.",
+              "warning",
             );
           }
         } catch {
@@ -357,6 +385,7 @@ export function useNavigationSession(
         etaText: route.durationText,
         errorMessage: floodWarning,
         isOffRoute: false,
+        isFlooded: flooded,
       }));
 
       announceStep(route.steps, 0);
@@ -405,6 +434,7 @@ export function useNavigationSession(
       errorMessage: null,
       isMuted: false,
       isOffRoute: false,
+      isFlooded: false,
     });
   }, []);
 

@@ -1,26 +1,35 @@
 import type { Severity } from "@/src/design/tokens";
 import type { LatLng, RouteResult } from "@/src/services/maps";
 import {
-  getRouteAlternatives,
-  getRouteGuidance,
   getCachedRouteForDestination,
+  getRouteGuidance,
 } from "@/src/services/maps";
 import type { FloodReport } from "@/src/types/domain";
 
-import { evaluateRouteBlock } from "@/src/features/decision-engine/scoring";
 import { isTyphoonMode } from "@/src/features/decision-engine/risk-policy";
+import { evaluateRouteBlock } from "@/src/features/decision-engine/scoring";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 export type FloodSafeResult = {
   route: RouteResult;
-  allBlocked: boolean;
+  /** True when the route passes through a flooded area. */
+  flooded: boolean;
   warning: string | null;
 };
 
+// ---------------------------------------------------------------------------
+// Simple single-destination route with flood evaluation
+// ---------------------------------------------------------------------------
+
 /**
- * Get the safest route to a destination by requesting alternatives from Google
- * and picking the first route that isn't blocked by flood reports.
+ * Fetch a route to the destination and evaluate it against flood reports.
  *
- * Falls back to the least-hazardous route if all alternatives are blocked.
+ * The route is ALWAYS returned — it is never discarded. If the route
+ * passes through flood pins, `flooded` is set to true so the UI can
+ * show a red route line and a "Flooded" label instead of blocking.
  */
 export async function getFloodSafeRoute(
   from: LatLng,
@@ -32,48 +41,39 @@ export async function getFloodSafeRoute(
 ): Promise<FloodSafeResult> {
   const typhoonActive = isTyphoonMode(signal);
 
-  let routes: RouteResult[];
+  let route: RouteResult;
   try {
-    routes = await getRouteAlternatives(from, to, fromLabel, toLabel);
+    route = await getRouteGuidance(from, to, fromLabel, toLabel);
   } catch {
-    // If alternatives fail, fall back to single route
-    try {
-      const single = await getRouteGuidance(from, to, fromLabel, toLabel);
-      routes = [single];
-    } catch {
-      const cached = await getCachedRouteForDestination(to);
-      if (cached) routes = [cached];
-      else throw new Error("No route available");
+    const cached = await getCachedRouteForDestination(to);
+    if (cached) {
+      route = cached;
+    } else {
+      throw new Error("No route available");
     }
   }
 
+  // No flood data or calm weather — route is fine
   if (!typhoonActive || floodReports.length === 0) {
-    return { route: routes[0], allBlocked: false, warning: null };
+    return { route, flooded: false, warning: null };
   }
 
-  // Evaluate each route against flood data
-  const evaluated = routes.map((route) => ({
-    route,
-    block: evaluateRouteBlock(route, floodReports, typhoonActive),
-  }));
+  // Evaluate route against flood pins
+  const block = evaluateRouteBlock(route, floodReports, typhoonActive);
 
-  // Pick first non-blocked route
-  const safe = evaluated.find((e) => !e.block.blocked);
-  if (safe) {
-    const warning =
-      safe.block.hazardPoints > 0
-        ? `Route may pass near flooded areas. ${safe.block.hazardPoints} points near high water.`
-        : null;
-    return { route: safe.route, allBlocked: false, warning };
+  if (block.blocked) {
+    return {
+      route,
+      flooded: true,
+      warning:
+        "BABALA: Ang ruta ay dumadaan sa may baha. Mag-ingat at i-verify ang kondisyon sa lugar.",
+    };
   }
 
-  // All routes blocked — pick the one with fewest hazard points
-  evaluated.sort((a, b) => a.block.hazardPoints - b.block.hazardPoints);
-  const least = evaluated[0];
-  return {
-    route: least.route,
-    allBlocked: true,
-    warning:
-      "BABALA: Lahat ng ruta ay dumadaan sa may baha. Mag-ingat at i-verify ang kondisyon sa lugar.",
-  };
+  const warning =
+    block.hazardPoints > 0
+      ? `Route may pass near flooded areas. ${block.hazardPoints} points near high water.`
+      : null;
+
+  return { route, flooded: false, warning };
 }

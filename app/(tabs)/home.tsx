@@ -1,4 +1,4 @@
-import { Link, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -38,8 +38,10 @@ import { useFloodStreetHighlights } from "@/src/features/map/use-flood-street-hi
 import { useMapReports } from "@/src/features/map/use-map-reports";
 import { useUserLocation } from "@/src/features/map/use-user-location";
 import { useConnectivity } from "@/src/features/offline/use-connectivity";
+import type { LatLng, RouteResult } from "@/src/services/maps";
+import { getRouteGuidance } from "@/src/services/maps";
 import type { PlaceLocation } from "@/src/services/places";
-import type { ReportDepth } from "@/src/types/domain";
+import type { FloodReport, ReportDepth } from "@/src/types/domain";
 import type { HourlyForecastEntry } from "@/src/types/weather";
 
 const DEPTH_COLORS: Record<ReportDepth, string> = {
@@ -176,6 +178,8 @@ export default function HomeScreen() {
   const [direMarker, setDireMarker] = useState<MapMarker | null>(null);
   const [direSending, setDireSending] = useState(false);
   const [direActive, setDireActive] = useState(false);
+  const [selectedFloodReport, setSelectedFloodReport] =
+    useState<FloodReport | null>(null);
 
   useEffect(() => {
     if (legendVisible) {
@@ -200,20 +204,43 @@ export default function HomeScreen() {
     [selectedDpwhId, getProjectById],
   );
 
-  const handleMarkerPress = useCallback((marker: MapMarker) => {
-    if (marker.category === "dpwh") {
-      setSelectedDpwhId(marker.id);
-      mapRef.current?.animateToRegion(
-        {
-          latitude: marker.latitude,
-          longitude: marker.longitude,
-          latitudeDelta: 0.008,
-          longitudeDelta: 0.008,
-        },
-        500,
-      );
-    }
-  }, []);
+  const handleMarkerPress = useCallback(
+    (marker: MapMarker) => {
+      if (marker.category === "dpwh") {
+        setSelectedDpwhId(marker.id);
+        setSelectedFloodReport(null);
+        mapRef.current?.animateToRegion(
+          {
+            latitude: marker.latitude,
+            longitude: marker.longitude,
+            latitudeDelta: 0.008,
+            longitudeDelta: 0.008,
+          },
+          500,
+        );
+      } else if (marker.category === "flood") {
+        // Find the matching FloodReport from the marker id
+        const reportId = marker.id.replace("flood-", "");
+        const report = floodReports.find((r) => r.id === reportId);
+        if (report) {
+          setSelectedFloodReport(report);
+          setSelectedDpwhId(null);
+          mapRef.current?.animateToRegion(
+            {
+              latitude: marker.latitude,
+              longitude: marker.longitude,
+              latitudeDelta: 0.005,
+              longitudeDelta: 0.005,
+            },
+            500,
+          );
+        }
+      } else {
+        setSelectedFloodReport(null);
+      }
+    },
+    [floodReports],
+  );
 
   const handleZonePress = useCallback((zone: MapZone) => {
     const coords = zone.coordinates;
@@ -317,22 +344,110 @@ export default function HomeScreen() {
     drainReports,
   ]);
 
-  const routeOverlay = useMemo(() => {
-    const best = decision?.recommendedCenters[0];
-    if (!best) return null;
-    if (best.route) {
-      return { polyline: best.route.polyline, color: "#000000", width: 4 };
+  // Standalone route fetch: for any of the top 3 recommended centers whose
+  // route the engine failed to fetch, try fetching directly so we can draw
+  // routes on roads instead of gray straight lines.
+  const [fallbackRoutes, setFallbackRoutes] = useState<
+    Record<string, RouteResult>
+  >({});
+  const fallbackFetchRef = useRef<string>("");
+
+  useEffect(() => {
+    const top3 = decision?.recommendedCenters.slice(0, 3) ?? [];
+    const missing = top3.filter((ev) => !ev.route);
+    if (missing.length === 0) {
+      setFallbackRoutes({});
+      fallbackFetchRef.current = "";
+      return;
     }
-    // Fallback: straight dashed line from user to center when no route polyline
+
+    // Build a stable key so we don't refetch the same set
+    const key = missing.map((ev) => ev.center.id).join(",");
+    if (fallbackFetchRef.current === key) return;
+    fallbackFetchRef.current = key;
+
+    const from: LatLng = {
+      latitude: location.latitude,
+      longitude: location.longitude,
+    };
+
+    void (async () => {
+      const map: Record<string, RouteResult> = {};
+      for (const ev of missing) {
+        try {
+          const to: LatLng = {
+            latitude: ev.center.lat,
+            longitude: ev.center.lng,
+          };
+          const route = await getRouteGuidance(
+            from,
+            to,
+            "Kasalukuyang lokasyon",
+            ev.center.name,
+          );
+          map[ev.center.id] = route;
+        } catch {
+          // skip this center
+        }
+      }
+      setFallbackRoutes(map);
+    })();
+  }, [decision, location.latitude, location.longitude]);
+
+  // Route colors
+  const SAFE_ROUTE_COLORS = ["#000000", "#6B7280", "#9CA3AF"] as const;
+  const FLOODED_COLOR = "#DC2626";
+
+  // Navigation target: first non-flooded center, or #1 if all flooded.
+  const navTarget = useMemo(() => {
+    if (!decision) return null;
+    const top3 = decision.recommendedCenters.slice(0, 3);
+    return top3.find((ev) => !ev.flooded) ?? top3[0] ?? null;
+  }, [decision]);
+
+  // Build the main route overlay (navigation target, thickest line)
+  const routeOverlay = useMemo(() => {
+    if (!navTarget) return null;
+
+    const route = navTarget.route ?? fallbackRoutes[navTarget.center.id];
+    if (route) {
+      const color = navTarget.flooded ? FLOODED_COLOR : SAFE_ROUTE_COLORS[0];
+      return { polyline: route.polyline, color, width: 5 };
+    }
+
+    // Last resort: thin straight line while route is still loading
     return {
       polyline: [
         { latitude: location.latitude, longitude: location.longitude },
-        { latitude: best.center.lat, longitude: best.center.lng },
+        { latitude: navTarget.center.lat, longitude: navTarget.center.lng },
       ],
-      color: "#6B7280",
-      width: 3,
+      color: "#9CA3AF",
+      width: 2,
     };
-  }, [decision, location.latitude, location.longitude]);
+  }, [navTarget, fallbackRoutes, location.latitude, location.longitude]);
+
+  // Build secondary route overlays for the other 2 centers
+  const secondaryRouteOverlays = useMemo(() => {
+    if (!decision || !navTarget) return [];
+    const overlays: { polyline: LatLng[]; color: string; width: number }[] = [];
+    const top3 = decision.recommendedCenters.slice(0, 3);
+    let colorIdx = 1;
+    for (const ev of top3) {
+      if (ev.center.id === navTarget.center.id) continue;
+      const route = ev.route ?? fallbackRoutes[ev.center.id];
+      if (route) {
+        overlays.push({
+          polyline: route.polyline,
+          color: ev.flooded
+            ? FLOODED_COLOR
+            : (SAFE_ROUTE_COLORS[colorIdx] ?? "#9CA3AF"),
+          width: 3,
+        });
+      }
+      colorIdx++;
+    }
+    return overlays;
+  }, [decision, navTarget, fallbackRoutes]);
 
   const initialRegion = {
     latitude: location.latitude,
@@ -411,8 +526,11 @@ export default function HomeScreen() {
   }, [showFloodLayer, floodZones]);
 
   const polylines = useMemo(
-    () => (showFloodLayer ? streetHighlights : []),
-    [showFloodLayer, streetHighlights],
+    () => [
+      ...secondaryRouteOverlays,
+      ...(showFloodLayer ? streetHighlights : []),
+    ],
+    [secondaryRouteOverlays, showFloodLayer, streetHighlights],
   );
 
   return (
@@ -473,6 +591,52 @@ export default function HomeScreen() {
             </Text>
           </View>
         )}
+
+        {selectedFloodReport ? (
+          <View
+            style={[
+              styles.floodReportPopup,
+              {
+                borderLeftColor: DEPTH_COLORS[selectedFloodReport.depth],
+              },
+            ]}
+          >
+            <View style={styles.floodPopupHeader}>
+              <View
+                style={[
+                  styles.floodPopupBadge,
+                  {
+                    backgroundColor: DEPTH_COLORS[selectedFloodReport.depth],
+                  },
+                ]}
+              >
+                <Text style={styles.floodPopupBadgeText}>
+                  {selectedFloodReport.depth.toUpperCase()}
+                </Text>
+              </View>
+              <Text style={styles.floodPopupTitle} numberOfLines={1}>
+                Flood Report
+              </Text>
+              <Pressable
+                onPress={() => setSelectedFloodReport(null)}
+                hitSlop={12}
+              >
+                <Text style={styles.floodPopupClose}>{"\u2715"}</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.floodPopupStatus}>
+              {selectedFloodReport.status === "confirmed"
+                ? "\u2705 Confirmed"
+                : "\u23F3 Pending verification"}
+              {" \u2014 "}
+              {selectedFloodReport.reporterLabel}
+            </Text>
+            <Text style={styles.floodPopupCoords}>
+              {selectedFloodReport.lat.toFixed(4)},{" "}
+              {selectedFloodReport.lng.toFixed(4)}
+            </Text>
+          </View>
+        ) : null}
       </SafeAreaView>
 
       {legendVisible ? (
@@ -785,7 +949,7 @@ export default function HomeScreen() {
                         key={ev.center.id}
                         style={[
                           styles.centerRow,
-                          ev.blocked && styles.centerRowBlocked,
+                          ev.flooded && styles.centerRowFlooded,
                         ]}
                         onPress={() => {
                           mapRef.current?.animateToRegion(
@@ -800,33 +964,75 @@ export default function HomeScreen() {
                         }}
                       >
                         <Text style={styles.centerName}>
-                          {ev.blocked ? "\u26A0 " : ""}
+                          {ev.flooded ? "\u26A0 " : ""}
+                          {navTarget?.center.id === ev.center.id
+                            ? "\u25B8 "
+                            : ""}
                           {ev.center.name}
                         </Text>
                         <Text style={styles.centerMeta}>
                           {ev.center.distanceKm.toFixed(1)} km ·{" "}
                           {ev.center.status}
                           {ev.route ? ` · ${ev.route.durationText}` : ""}
-                          {ev.blocked ? " · BLOCKED" : ""}
+                          {ev.flooded ? " · FLOODED" : ""}
+                          {!ev.flooded && navTarget?.center.id === ev.center.id
+                            ? " · RECOMMENDED"
+                            : ""}
                         </Text>
                       </Pressable>
                     ))}
-                    {decision.recommendedCenters[0] ? (
+                    {(() => {
+                      const top3 = decision.recommendedCenters.slice(0, 3);
+                      const floodedCount = top3.filter(
+                        (ev) => ev.flooded,
+                      ).length;
+                      if (floodedCount === 0) return null;
+                      const allFlooded = floodedCount === top3.length;
+                      return (
+                        <View
+                          style={{
+                            backgroundColor: allFlooded
+                              ? tokens.colors.severity.EVACUATE
+                              : tokens.colors.severity.LEAVE,
+                            borderRadius: 8,
+                            padding: 10,
+                            marginBottom: 8,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: "#FFFFFF",
+                              fontWeight: "700",
+                              fontSize: 13,
+                              textAlign: "center",
+                            }}
+                          >
+                            {allFlooded
+                              ? "\u26A0 Lahat ng ruta ay dumadaan sa baha \u2014 pinakamalapit na center ang gagamitin. Mag-ingat!"
+                              : "\u26A0 May ruta na dumadaan sa baha \u2014 nag-reroute sa clear na center"}
+                          </Text>
+                        </View>
+                      );
+                    })()}
+                    {navTarget ? (
                       <Pressable
-                        style={styles.primaryButton}
+                        style={[
+                          styles.primaryButton,
+                          navTarget.flooded && {
+                            backgroundColor: FLOODED_COLOR,
+                          },
+                        ]}
                         onPress={() => {
-                          const best = decision.recommendedCenters[0];
-                          if (best)
-                            router.push({
-                              pathname: "/navigate",
-                              params: { centerId: best.center.id },
-                            } as never);
+                          router.push({
+                            pathname: "/navigate",
+                            params: { centerId: navTarget.center.id },
+                          } as never);
                         }}
                       >
                         <Text style={styles.primaryButtonText}>
-                          {decision.recommendedCenters[0].route
-                            ? "Start Navigation"
-                            : `Navigate to ${decision.recommendedCenters[0].center.name}`}
+                          {navTarget.flooded
+                            ? `Navigate to ${navTarget.center.name} (Flooded)`
+                            : `Navigate to ${navTarget.center.name}`}
                         </Text>
                       </Pressable>
                     ) : null}
@@ -959,6 +1165,52 @@ const styles = StyleSheet.create({
   },
 
   alertPanel: { marginTop: 4 },
+  floodReportPopup: {
+    marginTop: 6,
+    backgroundColor: "rgba(255,255,255,0.95)",
+    borderRadius: tokens.radius.lg,
+    borderLeftWidth: 4,
+    borderWidth: 1,
+    borderColor: tokens.colors.border,
+    padding: tokens.spacing.md,
+    gap: 4,
+    boxShadow: "0 2px 12px rgba(0,0,0,0.12)",
+  },
+  floodPopupHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing.sm,
+  },
+  floodPopupBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: tokens.radius.sm,
+  },
+  floodPopupBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  floodPopupTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "700",
+    color: tokens.colors.textPrimary,
+  },
+  floodPopupClose: {
+    fontSize: 14,
+    color: tokens.colors.textSecondary,
+    fontWeight: "800",
+  },
+  floodPopupStatus: {
+    fontSize: 13,
+    color: tokens.colors.textSecondary,
+  },
+  floodPopupCoords: {
+    fontSize: 11,
+    color: tokens.colors.textSecondary,
+    fontFamily: "monospace",
+  },
   alertPanelInactive: {
     backgroundColor: "rgba(255,255,255,0.92)",
     borderRadius: tokens.radius.lg,
@@ -1252,8 +1504,7 @@ const styles = StyleSheet.create({
     padding: tokens.spacing.sm,
     gap: 2,
   },
-  centerRowBlocked: {
-    opacity: 0.5,
+  centerRowFlooded: {
     borderWidth: 1,
     borderColor: tokens.colors.danger,
   },

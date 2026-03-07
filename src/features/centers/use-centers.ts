@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { EvacCenter } from "@/src/types/domain";
-import type { NearbyEvacCenterRow } from "@/src/types/supabase";
 
 import { readJson, writeJson } from "@/src/features/offline/storage";
 import type { NearbyPlace } from "@/src/services/places";
 import { searchNearbyShelters } from "@/src/services/places";
-import { fetchNearbyEvacCenters } from "@/src/services/supabase";
 
 const CACHE_KEY = "agos:evac-centers";
 
@@ -25,20 +23,6 @@ function haversineKm(
       Math.cos((lat2 * Math.PI) / 180) *
       Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function rowToDomain(row: NearbyEvacCenterRow): EvacCenter {
-  return {
-    id: row.id,
-    name: row.name,
-    barangay: row.barangay,
-    address: row.address,
-    lat: row.lat,
-    lng: row.lng,
-    distanceKm: Math.round(row.distance_km * 100) / 100,
-    status: row.status,
-    uncertaintyNote: row.uncertainty_note,
-  };
 }
 
 function placeToDomain(
@@ -116,16 +100,6 @@ export function useCenters(userLat?: number, userLng?: number) {
         }
       } catch {
         // Places API failed — continue with other sources
-      }
-
-      // Source 2: Supabase RPC (enrichment — may be null if no Supabase keys)
-      try {
-        const rows = await fetchNearbyEvacCenters(userLat, userLng, 5);
-        for (const row of rows) {
-          discovered.push(rowToDomain(row));
-        }
-      } catch {
-        // Supabase unavailable — continue with Places results
       }
 
       if (!cancelled) {

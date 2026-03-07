@@ -8,6 +8,7 @@ import type {
   DbAlert,
   DbDrainReport,
   DbFloodReport,
+  DbFloodReportRaw,
   DrainReportInsert,
   FloodReportInsert,
   NearbyEvacCenterRow,
@@ -63,17 +64,17 @@ export function subscribeToAlerts(
 export async function fetchFloodReports(): Promise<DbFloodReport[]> {
   if (!supabase) return [];
   const { data, error } = await supabase
-    .from("flood_reports")
+    .from("flood_reports_with_latlng" as never)
     .select("*")
     .order("created_at", { ascending: false })
     .limit(200);
   if (error) throw error;
-  return data ?? [];
+  return (data as DbFloodReport[] | null) ?? [];
 }
 
 export async function insertFloodReport(
   report: FloodReportInsert,
-): Promise<DbFloodReport | null> {
+): Promise<DbFloodReportRaw | null> {
   if (!supabase) return null;
   const { data, error } = await supabase
     .from("flood_reports")
@@ -81,16 +82,16 @@ export async function insertFloodReport(
     .select()
     .single();
   if (error) throw error;
-  return data;
+  return data as DbFloodReportRaw | null;
 }
 
 export function subscribeToFloodReports(
-  onInsert: (report: DbFloodReport) => void,
+  onInsert: (report: DbFloodReportRaw) => void,
 ): RealtimeChannel | null {
   if (!supabase) return null;
   return supabase
     .channel("flood-reports-realtime")
-    .on<DbFloodReport>(
+    .on<DbFloodReportRaw>(
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "flood_reports" },
       (payload) => {
@@ -99,7 +100,7 @@ export function subscribeToFloodReports(
           typeof payload.new === "object" &&
           "id" in payload.new
         ) {
-          onInsert(payload.new as DbFloodReport);
+          onInsert(payload.new as DbFloodReportRaw);
         }
       },
     )
@@ -113,22 +114,22 @@ export function subscribeToFloodReports(
 export async function fetchDrainReports(): Promise<DbDrainReport[]> {
   if (!supabase) return [];
   const { data, error } = await supabase
-    .from("drain_reports")
+    .from("drain_reports_with_latlng" as never)
     .select("*")
     .order("created_at", { ascending: false })
     .limit(200);
   if (error) throw error;
-  return data ?? [];
+  return (data as DbDrainReport[] | null) ?? [];
 }
 
 export async function insertDrainReport(
   report: DrainReportInsert,
-): Promise<DbDrainReport | null> {
+): Promise<{ id: string } | null> {
   if (!supabase) return null;
   const { data, error } = await supabase
     .from("drain_reports")
     .insert(report)
-    .select()
+    .select("id")
     .single();
   if (error) throw error;
   return data;

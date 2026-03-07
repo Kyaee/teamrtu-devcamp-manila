@@ -1,6 +1,8 @@
+/** Row from the flood_reports_with_latlng view (lat/lng pre-extracted). */
 export type DbFloodReport = {
   id: string;
-  location: string; // PostGIS geography serialized as GeoJSON or WKT
+  lat: number;
+  lng: number;
   depth: "ankle" | "knee" | "waist" | "chest";
   status: "pending" | "confirmed";
   reporter_label: string;
@@ -8,9 +10,22 @@ export type DbFloodReport = {
   created_at: string;
 };
 
-export type DbDrainReport = {
+/** Raw row from flood_reports table (realtime payloads use this). */
+export type DbFloodReportRaw = {
   id: string;
   location: string;
+  depth: "ankle" | "knee" | "waist" | "chest";
+  status: "pending" | "confirmed";
+  reporter_label: string;
+  barangay: string | null;
+  created_at: string;
+};
+
+/** Row from the drain_reports_with_latlng view (lat/lng pre-extracted). */
+export type DbDrainReport = {
+  id: string;
+  lat: number;
+  lng: number;
   description: string;
   status: "pending" | "confirmed";
   created_at: string;

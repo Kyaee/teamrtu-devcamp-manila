@@ -18,11 +18,19 @@ import MapDisplay from "@/src/features/map/MapDisplay";
 import { useMapReports } from "@/src/features/map/use-map-reports";
 import { useUserLocation } from "@/src/features/map/use-user-location";
 import type {
-  NavStatus,
   FloodContext,
+  NavStatus,
 } from "@/src/features/navigation/use-navigation-session";
 import { useNavigationSession } from "@/src/features/navigation/use-navigation-session";
 import type { LatLng } from "@/src/services/maps";
+import type { ReportDepth } from "@/src/types/domain";
+
+const DEPTH_COLORS: Record<ReportDepth, string> = {
+  ankle: tokens.colors.severity.MONITOR,
+  knee: tokens.colors.severity.PREPARE,
+  waist: tokens.colors.severity.LEAVE,
+  chest: tokens.colors.severity.EVACUATE,
+};
 
 const STATUS_LABELS: Record<NavStatus, string> = {
   idle: "Ready",
@@ -121,13 +129,27 @@ export default function NavigateScreen() {
         description: "Current location",
       });
     }
+    // Flood report markers — show hazard context during navigation
+    for (const r of floodReports) {
+      result.push({
+        id: `flood-${r.id}`,
+        latitude: r.lat,
+        longitude: r.lng,
+        pinColor: DEPTH_COLORS[r.depth],
+        opacity: r.status === "confirmed" ? 1 : 0.6,
+        title: `Flood: ${r.depth} depth`,
+        description: `${r.status === "confirmed" ? "Confirmed" : "Pending"} — ${r.reporterLabel}`,
+      });
+    }
     return result;
-  }, [targetCenter, nav.currentPosition]);
+  }, [targetCenter, nav.currentPosition, floodReports]);
 
   const routeOverlay = useMemo(() => {
     if (!nav.route) return null;
-    return { polyline: nav.route.polyline, color: "#000000", width: 5 };
-  }, [nav.route]);
+    // Red route if flooded, black if safe
+    const color = nav.isFlooded ? "#DC2626" : "#000000";
+    return { polyline: nav.route.polyline, color, width: 5 };
+  }, [nav.route, nav.isFlooded]);
 
   const initialRegion = {
     latitude: location.latitude,
@@ -195,6 +217,14 @@ export default function NavigateScreen() {
           <View style={styles.offRouteBanner}>
             <Text style={styles.offRouteText}>
               Lumihis sa ruta — nagre-reroute...
+            </Text>
+          </View>
+        ) : null}
+
+        {nav.isFlooded && !nav.isOffRoute ? (
+          <View style={styles.floodedRouteBanner}>
+            <Text style={styles.floodedRouteText}>
+              ⚠ FLOODED — Ruta dumadaan sa baha. Mag-ingat!
             </Text>
           </View>
         ) : null}
@@ -370,6 +400,22 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: tokens.type.label,
     fontWeight: "600",
+  },
+  floodedRouteBanner: {
+    position: "absolute",
+    top: 40,
+    left: 8,
+    right: 8,
+    backgroundColor: "rgba(220,38,38,0.9)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: tokens.radius.sm,
+    alignItems: "center",
+  },
+  floodedRouteText: {
+    color: "#FFFFFF",
+    fontSize: tokens.type.label,
+    fontWeight: "700",
   },
   navPanel: {
     padding: tokens.spacing.md,

@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { DrainReport, FloodReport, ReportDepth } from "@/src/types/domain";
-import type { DbDrainReport, DbFloodReport } from "@/src/types/supabase";
+import type {
+  DbDrainReport,
+  DbFloodReport,
+  DbFloodReportRaw,
+} from "@/src/types/supabase";
 
 import { readJson, writeJson } from "@/src/features/offline/storage";
 import {
@@ -29,10 +33,22 @@ type OfflineQueueItem =
   | { kind: "drain"; lat: number; lng: number; description: string };
 
 function dbFloodToDomain(row: DbFloodReport): FloodReport {
-  let lat = 14.62;
-  let lng = 121.09;
+  return {
+    id: row.id,
+    lat: row.lat,
+    lng: row.lng,
+    depth: row.depth,
+    status: row.status,
+    createdAt: row.created_at,
+    reporterLabel: row.reporter_label,
+  };
+}
+
+/** Parse a raw realtime payload (location is hex WKB or GeoJSON string). */
+function rawFloodToDomain(row: DbFloodReportRaw): FloodReport {
+  let lat = 0;
+  let lng = 0;
   try {
-    // PostGIS returns geography as JSON: {"type":"Point","coordinates":[lng,lat]}
     const geo =
       typeof row.location === "string"
         ? JSON.parse(row.location)
@@ -42,7 +58,7 @@ function dbFloodToDomain(row: DbFloodReport): FloodReport {
       lat = geo.coordinates[1];
     }
   } catch {
-    // fall back to defaults
+    // hex WKB can't be parsed as JSON — skip, lat/lng stay 0
   }
   return {
     id: row.id,
@@ -56,24 +72,10 @@ function dbFloodToDomain(row: DbFloodReport): FloodReport {
 }
 
 function dbDrainToDomain(row: DbDrainReport): DrainReport {
-  let lat = 14.619;
-  let lng = 121.097;
-  try {
-    const geo =
-      typeof row.location === "string"
-        ? JSON.parse(row.location)
-        : row.location;
-    if (geo?.coordinates) {
-      lng = geo.coordinates[0];
-      lat = geo.coordinates[1];
-    }
-  } catch {
-    // fall back to defaults
-  }
   return {
     id: row.id,
-    lat,
-    lng,
+    lat: row.lat,
+    lng: row.lng,
     description: row.description,
     status: row.status,
     createdAt: row.created_at,
@@ -110,11 +112,16 @@ export function useMapReports() {
         if (!cancelled) {
           const floods = floodRows.map(dbFloodToDomain);
           const drains = drainRows.map(dbDrainToDomain);
-          setFloodReports(floods);
-          setDrainReports(drains);
+          // Only overwrite cache if remote returned data — prevent clobber
+          if (floods.length > 0 || cachedFlood.length === 0) {
+            setFloodReports(floods);
+            await writeJson(FLOOD_KEY, floods);
+          }
+          if (drains.length > 0 || cachedDrain.length === 0) {
+            setDrainReports(drains);
+            await writeJson(DRAIN_KEY, drains);
+          }
           setReportsLoaded(true);
-          await writeJson(FLOOD_KEY, floods);
-          await writeJson(DRAIN_KEY, drains);
         }
       } catch {
         if (!cancelled) setReportsLoaded(true);
@@ -129,7 +136,9 @@ export function useMapReports() {
   // Realtime subscription for flood reports from other users
   useEffect(() => {
     const channel = subscribeToFloodReports((row) => {
-      const report = dbFloodToDomain(row);
+      const report = rawFloodToDomain(row);
+      // Skip reports where location couldn't be parsed (lat/lng = 0)
+      if (report.lat === 0 && report.lng === 0) return;
       setFloodReports((prev) => {
         if (prev.some((r) => r.id === report.id)) return prev;
         const next = [report, ...prev];
