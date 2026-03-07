@@ -1,8 +1,8 @@
 # AGOS AI Implementation Playbook
 
-Version: v1.1
+Version: v1.2
 Project: AGOS (React Native + Expo Router + Supabase)
-Primary references: `product.md`, `ui/ui-guidelines.md`, `ui/on-the-go-mode.mermaid`
+Primary references: `prompts/product.md`, `design/on-the-go-mode.mermaid`, `design/donation.mermaid`, `ui/ui-guidelines.md`
 
 ---
 
@@ -38,63 +38,93 @@ Use these model assignments in Cursor:
    - Model: **Haiku 4.5** (fallback: Claude 3.7 Sonnet)
    - Responsibility: end-to-end acceptance checks, UX/flow compliance, regressions vs MVP scope.
 
-> If a listed model is unavailable in your Cursor plan, use the named fallback or closest equivalent for that role.
+- Barangay-specific real-time flood alerts (`Watch / Warning / Danger`)
+- Street-level flood map with community depth reporting
+- Evacuation center finder + route guidance
+- Offline fallback mode (cached data + sync-on-reconnect)
+- SMS continuity fallback
+- Rule-based evacuation decision logic
+- Household preparedness checklist
+- Baseline digital inclusion behavior (Flood Buddy + SMS relay patterns)
 
----
+### Explicitly deferred (Phase 2)
 
-## 1) Product Scope Lock (Non-Negotiable)
+- Full donation claim/payment release flow
+- Full LGU admin portal capabilities
+- Full multilingual coverage across all Philippine regional languages
+- Post-flood regeneration dashboards and institutional integrations
+- ML-based evacuation decision model
 
-MVP includes ONLY:
-
-- Real-time barangay-specific alerts
-- Street-level depth map + report submission
-- Evacuation center finder + routing
-- Offline/SMS fallback
-
-Out of scope for MVP:
-
-- Donation flow
-- Expanded preparedness gamification
-- Non-critical exploratory modules
-
-Core product rule:
-
-- AGOS solves last-mile communication, not infrastructure flooding control.
+Donation and relief flow from `design/donation.mermaid` should be designed now as contracts/UI stubs, but not shipped as active MVP production flow unless scope is re-opened.
 
 ---
 
 ## 2) Global Engineering Rules
 
-- Stack: Expo Router + React Native + Supabase.
-- Keep feature-first architecture under `src/features/*`.
-- No direct backend calls in presentational components.
-- Use service/repository pattern.
-- Filipino-first copy for alerts and emergency CTAs.
-- Severity must always be conveyed with text + icon + color.
-- Optimize lists (virtualized lists, lightweight rows).
-- Keep map/report UX fast (<10s report intent path).
-- Prefer stable references, derived state, and minimal re-renders.
+- Stack remains: Expo Router + React Native + Supabase.
+- Use feature-first architecture under `src/features/*`.
+- No direct Supabase calls in presentational components.
+- Enforce service/repository boundaries for all data access.
+- Filipino-first emergency copy for critical alerts and CTAs.
+- Severity semantics must always use text + icon + color.
+- Keep report action path fast and low-friction.
+- Support connectivity degradation without dead-end screens.
 
 ---
 
-## 3) UI System Requirements (From `ui/ui-guidelines.md`)
+## 3) UX Flow Requirements from Mermaid Sources
+
+### From `design/on-the-go-mode.mermaid`
+
+Online path must support:
+
+- App open -> permissions -> connectivity check
+- Home alert decision (no alert: map browse, alert: severity + evacuation decision)
+- Map actions: flood report, clogged drain report, preparedness
+- Evacuation route and arrival flow
+- Post-flood branching to facilities and relief/donation continuation
+
+Offline path must support:
+
+- Automatic offline mode activation
+- Cached map and cached evacuation center access
+- Local storage for flood and drain reports
+- Explicit sync status message and reconnect loop
+
+### From `design/donation.mermaid`
+
+Donation/relief flow contracts to preserve:
+
+- OTP verification by mobile number
+- Household identity via address + barangay
+- Family linkage vs create-new-family branching
+- One-claim-per-family enforcement
+- Donation path and claim path as separate outcomes
+
+For MVP:
+
+- keep as gated module and schema-ready contracts;
+- do not expose full payment and full claim fulfillment as production-critical flow.
+
+---
+
+## 4) UI System Requirements
 
 - Dark mode only for MVP.
-- Severity colors reserved strictly for alert semantics:
+- Severity color mapping is fixed:
   - MONITOR `#3B82F6`
   - PREPARE `#F59E0B`
   - LEAVE `#F97316`
   - EVACUATE `#EF4444`
-- Primary CTA: square corners (0 radius), high emphasis.
-- Typography: Outfit (headings), DM Sans (body), legibility first.
+- Primary CTA: square corners (0 radius), high-contrast emphasis.
+- Typography: Outfit for headings, DM Sans for body.
 - Minimum functional text size: 15px.
-- One primary action per emergency state.
-- Alert card is the dominant home component.
-- Map is source of truth across flows.
+- Single primary action per alert state.
+- Alert card remains dominant home component.
 
 ---
 
-## 4) Target App Structure
+## 5) Target App Structure
 
 Routes:
 
@@ -105,6 +135,8 @@ Routes:
 - `app/alert/[id].tsx`
 - `app/center/[id].tsx`
 - `app/settings/index.tsx`
+- `app/relief/index.tsx` (MVP-gated stub)
+- `app/donation/index.tsx` (MVP-gated stub)
 
 Core folders:
 
@@ -114,90 +146,98 @@ Core folders:
 - `src/features/centers/`
 - `src/features/reports/`
 - `src/features/offline/`
+- `src/features/preparedness/`
+- `src/features/relief/` (contracts + stubs)
 - `src/services/` (supabase/maps/weather/tts/sms adapters)
 - `src/store/` (app state slices)
 - `src/types/` (domain contracts)
 
 ---
 
-## 5) Agent Definitions
+## 6) Agent Definitions
 
 ### Agent A — UI Foundation Agent
 
-Model: Gemini 3.0 Pro
 Scope:
 
-- Create AGOS tokens/theme primitives.
-- Build reusable UI components.
-- Replace starter template visuals.
-- Implement 4-tab shell and shared layouts.
+- Build tokens/theme primitives and shell screens.
+- Enforce alert hierarchy, severity visuals, and emergency CTA consistency.
+- Implement online/offline UX states from on-the-go flow.
 
 Deliverables:
 
-- Unified visual system with AGOS rules.
-- Reusable components ready for feature teams.
+- Shared UI library + route shell + emergency state components.
 
 ### Agent B — Map + Reports Agent
 
-Model: Opus 4.6 (fallback: Claude 3.7 Sonnet)
 Scope:
 
-- Map screen implementation and pin rendering.
-- Report flow (depth -> optional photo -> location confirm).
-- Pending vs confirmed report states.
-- Offline queue + sync-on-reconnect for report submissions.
+- Street-level map with pin rendering and state legends.
+- Flood report flow and clogged drain report flow.
+- Pending vs confirmed state treatment on map.
+- Offline local queue + reconnect sync.
 
 Deliverables:
 
-- Functional map/report flow with local resilience.
+- End-to-end map/report behavior including offline storage and sync.
 
 ### Agent C — Alerts + Decision Engine Agent
 
-Model: Claude 3.7 Sonnet
 Scope:
 
-- Alert domain + realtime subscriptions.
-- Decision state rendering (MONITOR/PREPARE/LEAVE/EVACUATE).
-- Push notifications and TTS trigger behavior.
-- Integrate alert CTA handoffs to route/centers.
+- Alert ingestion + realtime updates + fallback polling.
+- Rule-based decision state rendering and CTA routing.
+- Push notification integration and optional audio/TTS behavior.
+- Permission re-check and degraded-mode safety messaging.
 
 Deliverables:
 
-- End-to-end alert pipeline from backend event to user action.
+- Alert-to-action pipeline with clear decision UI and safe fallbacks.
 
 ### Agent D — Centers + Routing + SMS Agent
 
-Model: Opus 4.6 (fallback: Claude 3.7 Sonnet)
 Scope:
 
-- Evacuation center list/filter/detail.
-- Route action and passability-aware recommendation hook.
-- SMS provider abstraction and fallback dispatch flow.
+- Center list/detail and route handoff.
+- Cached route fallback for offline usage.
+- SMS fallback dispatch abstraction and template integration.
+- Post-flood facilities lookup path.
 
 Deliverables:
 
-- Usable center discovery + resilient fallback communications path.
+- Reliable center/routing experience and fallback communication path.
 
-### Agent E — QA Gate Agent
+### Agent E — Relief/Donation Contract Agent (Phase 2 guarded)
 
-Model: Haiku 4.5 (fallback: Claude 3.7 Sonnet)
 Scope:
 
-- Validate UX, accessibility, offline behavior, and MVP compliance.
-- Ensure out-of-scope features are not leaking in.
-- Run release checklist and defect triage.
+- Implement OTP/address/family-link data contracts from donation flow.
+- Add claim-eligibility and one-claim-per-family validation service.
+- Build MVP-hidden stubs for future donation/claim screens.
 
 Deliverables:
 
-- Go/No-Go report with findings and severity tags.
+- Schema and API contract readiness without violating MVP scope lock.
+
+### Agent F — QA Gate Agent
+
+Scope:
+
+- Validate MVP compliance, accessibility, offline resilience, and safety semantics.
+- Verify Mermaid flow parity for online and offline branches.
+- Confirm deferred modules remain gated.
+
+Deliverables:
+
+- Go/No-Go report with severity-tagged findings.
 
 ---
 
-## 6) Technical Blueprint (UI + Backend)
+## 7) Technical Blueprint (Supabase-Centered)
 
 ### Data model (Supabase)
 
-Required tables:
+Required MVP tables:
 
 - `users`
 - `flood_reports`
@@ -205,80 +245,96 @@ Required tables:
 - `evac_centers`
 - `registered_buddies`
 - `flood_zones`
+- `offline_sync_queue` (client sync coordination)
+
+Phase-2-ready tables (schema only in MVP, optional):
+
+- `family_records`
+- `relief_claims`
+- `donations`
+- `otp_sessions`
 
 Must-have controls:
 
 - RLS policies by role and access context.
 - Geospatial query support for proximity checks.
-- Consensus enforcement for reports (2 reports / 500m / 30min).
+- Consensus enforcement for flood confirmation logic: **3 reports / 200m**.
+- One-claim-per-family rule constraints for relief contracts.
 
 ### Backend execution
 
-- Edge Function: decision engine run cadence (active weather windows).
+- Supabase Edge Function for rule-based evacuation decision cadence.
 - Realtime subscriptions:
   - alerts updates
-  - report inserts/confirmations
-  - center status changes
-- Fallback polling if realtime socket is unstable.
+  - report inserts and confirmations
+  - evacuation center status updates
+- Fallback polling when realtime connection is unstable.
+- SMS dispatch service abstraction for offline critical notices.
 
 ### Client behavior
 
-- Cached latest alert + nearby centers + pending actions.
-- Offline-safe UI with "last updated" state visible.
-- No blank map/report/center screens during connectivity issues.
-- Sync pending report queue on reconnect.
+- Cache latest alert, centers, last-known route, and emergency instructions.
+- Explicit `last updated` and `offline` indicators.
+- No blank-state failures in map, report, or center flows.
+- Queue write actions locally and sync on reconnect.
 
 ---
 
-## 7) Delivery Phases (48h MVP)
+## 8) Delivery Phases (48h MVP)
 
 Phase 1 (0-4h):
 
-- project scaffolding, routing shell, token/theme baseline, env wiring
+- scaffolding, route shell, theme system, env wiring, permission baseline
 
 Phase 2 (4-16h):
 
-- map screen, report flow, local queue behavior, report display states
+- map + flood/drain report flow + queueing + pending/confirmed rendering
 
 Phase 3 (16-28h):
 
-- alert model + realtime + decision state UI + push/TTS trigger path
+- alert model + decision UI + realtime/fallback polling + push behavior
 
 Phase 4 (28-40h):
 
-- centers list/filter/detail + route handoff + passability hook + SMS adapter
+- centers + route + offline cache behavior + SMS fallback path
 
 Phase 5 (40-48h):
 
-- hardening, accessibility pass, demo seed data, QA signoff
+- preparedness module polish + offline QA + scope-gate validation + demo data
+
+Parallel (non-blocking, gated):
+
+- donation/relief schema contracts and screen stubs only
 
 ---
 
-## 8) Definition of Done (MVP Exit Criteria)
+## 9) Definition of Done (MVP Exit Criteria)
 
-- Barangay-level alert appears live and drives correct state UI.
-- Flood report can be submitted quickly and survives offline interruptions.
-- Consensus logic controls public confirmation state.
-- User can find open center and start routing.
-- Orange/Red path supports SMS fallback dispatch behavior.
-- All core emergency copy is Filipino-first.
-- Performance acceptable on low/mid-range devices.
-
----
-
-## 9) Orchestrator Prompt (Use this in Cursor)
-
-"You are the AGOS integration orchestrator. Enforce MVP scope from `product.md`, UI constraints from `ui/ui-guidelines.md`, and flow constraints from `ui/on-the-go-mode.mermaid`. Coordinate specialized agents by ownership boundaries, prevent overlap conflicts, and gate merges on Definition of Done. Prioritize emergency clarity, offline resilience, and barangay-specific decision support over feature expansion."
+- Barangay-level alert appears and triggers correct severity UI and CTA.
+- Flood and drain reports can be submitted online and queued offline.
+- Confirmation logic uses **3 reports / 200m** where gating applies.
+- User can discover nearby centers and access route guidance.
+- Offline mode exposes cached map/centers/instructions and sync messaging.
+- SMS fallback path exists for high-severity continuity events.
+- Preparedness checklist is usable and complete.
+- Donation/relief production flow is not exposed in MVP release surface.
 
 ---
 
-## 10) Agent Prompt Base Template
+## 10) Orchestrator Prompt (Use in Cursor)
 
-"You are [AGENT_NAME] using [MODEL_NAME] for AGOS.
+"You are the AGOS integration orchestrator. Enforce MVP scope from `prompts/product.md`, implementation rules from this playbook, and flow behavior from `design/on-the-go-mode.mermaid` and `design/donation.mermaid`. Keep the stack as React Native + Expo Router + Supabase. Prioritize emergency clarity, offline resilience, and barangay-specific decision support. Implement donation/relief only as gated contracts and stubs unless scope is explicitly expanded."
+
+---
+
+## 11) Agent Prompt Base Template
+
+"You are [AGENT_NAME] for AGOS.
 Your scope is limited to: [SCOPE].
-Follow: `product.md`, `ui/ui-guidelines.md`, `ui/on-the-go-mode.mermaid`.
-Do not introduce non-MVP features.
+Follow: `prompts/product.md`, `prompts/first-implementation.md`, `design/on-the-go-mode.mermaid`, `design/donation.mermaid`, and `ui/ui-guidelines.md`.
+Do not introduce non-MVP production features.
 Preserve Filipino-first emergency UX and severity semantics.
+Keep stack constraints: React Native + Expo Router + Supabase.
 Output:
 
 1. files touched
