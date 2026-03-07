@@ -1,6 +1,6 @@
+import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import React from "react";
-import { Ionicons } from "@expo/vector-icons";
 
 import { tokens } from "@/src/design/tokens";
 
@@ -8,10 +8,10 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: tokens.colors.ctaPrimary,
-        tabBarInactiveTintColor: tokens.colors.textDisabled,
+        tabBarActiveTintColor: "#000000",
+        tabBarInactiveTintColor: "#A3A3A3",
         tabBarStyle: {
-          backgroundColor: tokens.colors.surface,
+          backgroundColor: "#FFFFFF",
           borderTopColor: tokens.colors.border,
         },
         headerShown: false,

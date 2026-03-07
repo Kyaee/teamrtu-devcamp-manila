@@ -4,13 +4,32 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Screen } from "@/src/components/screen";
 import { tokens } from "@/src/design/tokens";
 import { useCenters } from "@/src/features/centers/use-centers";
+import { usePreparedness } from "@/src/features/preparedness/use-preparedness";
 
 export default function CentersScreen() {
   const { centers, openOnly, setOpenOnly } = useCenters();
+  const { tasks, toggleTask, completion } = usePreparedness();
 
   return (
     <Screen>
       <Text style={styles.header}>Evacuation centers</Text>
+
+      <View style={styles.card}>
+        <Text style={styles.title}>Preparedness checklist ({completion})</Text>
+        {tasks.map((task) => (
+          <Pressable
+            key={task.id}
+            style={styles.checkRow}
+            onPress={() => toggleTask(task.id)}
+          >
+            <Text style={styles.checkMark}>
+              {task.done ? "\u2713" : "\u25CB"}
+            </Text>
+            <Text style={styles.body}>{task.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+
       <View style={styles.filterRow}>
         <Text style={styles.body}>Open only filter</Text>
         <Pressable style={styles.toggle} onPress={() => setOpenOnly(!openOnly)}>
@@ -108,7 +127,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   statusText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 12,
     fontWeight: "700",
   },
@@ -133,5 +152,16 @@ const styles = StyleSheet.create({
   link: {
     color: tokens.colors.ctaPrimary,
     fontSize: tokens.type.body,
+  },
+  checkRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  checkMark: {
+    color: tokens.colors.textPrimary,
+    fontSize: 16,
+    width: 18,
+    marginTop: 2,
   },
 });

@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { EvacCenter } from "@/src/types/domain";
 import type { NearbyEvacCenterRow } from "@/src/types/supabase";
 
+import { filterCentersByAllowlist } from "@/src/features/centers/csv-allowlist";
+import { evacCenters as seedCenters } from "@/src/features/centers/data";
 import { readJson, writeJson } from "@/src/features/offline/storage";
 import { fetchNearbyEvacCenters } from "@/src/services/supabase";
 
@@ -26,19 +28,18 @@ export function useCenters(userLat?: number, userLng?: number) {
   const [allCenters, setAllCenters] = useState<EvacCenter[]>([]);
   const [openOnly, setOpenOnly] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     const load = async () => {
-      // Show cached data immediately
       const cached = await readJson<EvacCenter[]>(CACHE_KEY, []);
       if (!cancelled && cached.length > 0) {
         setAllCenters(cached);
         setLoading(false);
       }
 
-      // Default to Marikina area if no user location
       const lat = userLat ?? 14.6308;
       const lng = userLng ?? 121.1023;
 
@@ -47,12 +48,20 @@ export function useCenters(userLat?: number, userLng?: number) {
         if (!cancelled) {
           const mapped = rows.map(rowToDomain);
           setAllCenters(mapped);
+          setError(null);
           await writeJson(CACHE_KEY, mapped);
         }
       } catch {
-        // keep cached data
+        if (!cancelled) {
+          setError(
+            "Hindi makuha ang mga evacuation center. Gamit ang cached data.",
+          );
+        }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setAllCenters((prev) => (prev.length > 0 ? prev : seedCenters));
+          setLoading(false);
+        }
       }
     };
 
@@ -63,8 +72,9 @@ export function useCenters(userLat?: number, userLng?: number) {
   }, [userLat, userLng]);
 
   const centers = useMemo<EvacCenter[]>(() => {
-    if (!openOnly) return allCenters;
-    return allCenters.filter((c) => c.status === "open");
+    const filtered = filterCentersByAllowlist(allCenters);
+    if (!openOnly) return filtered;
+    return filtered.filter((c) => c.status === "open");
   }, [openOnly, allCenters]);
 
   return {
@@ -72,5 +82,6 @@ export function useCenters(userLat?: number, userLng?: number) {
     openOnly,
     setOpenOnly,
     loading,
+    error,
   };
 }

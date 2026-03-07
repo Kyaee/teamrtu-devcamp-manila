@@ -1,0 +1,35 @@
+Project NOAH — Flood Hazard Data (Metro Manila),,,,,,,
+25-Year Return Period Flood Hazard Polygons · LiDAR-based · ESRI Shapefile format (ODbL 1.0) · Source: noah.up.edu.ph,,,,,,,
+Hazard Levels: Low (Yellow) · Medium (Orange) · High (Red)  |  Return Periods: 5-yr · 25-yr · 100-yr,,,,,,,
+City / LGU,Flood Hazard Level (25-yr),Storm Surge Level,Landslide Level,Area (km²),Dominant River Basin,LiDAR Coverage,Notes
+Manila,High,High,Low,38.55,Pasig River / Manila Bay,Yes,Highly urbanised; severe flood risk
+Quezon City,Medium–High,Low,Medium,161.11,Tullahan River / Marikina River,Yes,Largest NCR city; varied topography
+Caloocan,High,Medium,Low,53.33,Tullahan River,Yes,Large low-lying northern areas
+Las Piñas,High,High,Low,32.69,Las Piñas River / Manila Bay,Yes,Coastal; high storm surge exposure
+Makati,Medium,Low,Low,27.36,Pasig River tributaries,Yes,Central business district; mid hazard
+Malabon,High,High,Low,15.96,Tullahan River / Manila Bay,Yes,Chronically flooded; lowest elevation
+Mandaluyong,Medium,Low,Low,25.99,Pasig River,Yes,Bounded by Pasig River
+Marikina,High,Low,Low,21.52,Marikina River,Yes,Marikina River highly flood-prone
+Muntinlupa,Medium,Medium,Medium,39.75,Laguna de Bay,Yes,Highest flood-risk coverage gap (Roberto score 0.4682)
+Navotas,High,High,Low,8.95,Manila Bay / Navotas River,Yes,Lowest elevation; severe coastal risk
+Parañaque,High,High,Low,47.69,Las Piñas–Parañaque River / Manila Bay,Yes,Stalled Parañaque spillway project
+Pasay,High,High,Low,13.97,Manila Bay,Yes,Coastal; airport zone
+Pasig,High,Low,Low,31,Pasig River / San Juan River,Yes,Marikina/Pasig watershed
+Pateros,Medium,Low,Low,1.8,Patero-Taguig River,Yes,Smallest NCR city; high Roberto score 0.9997
+San Juan,Medium,Low,Low,5.94,San Juan River,Yes,Bounded by San Juan River
+Taguig,Medium–High,Medium,Low,53.67,Laguna de Bay / Taguig River,Yes,BGC elevated; southern barangays lower
+Valenzuela,High,Medium,Low,47.09,Tullahan River,Yes,Industrial area; frequent flooding
+,,,,,,,
+NOAH Dataset Specifications,,,,,,,
+Program,Project NOAH — Nationwide Operational Assessment of Hazards,,,,,,
+Established,2012 (DOST); transferred to UP Resilience Institute 2017,,,,,,
+Data Type,"Flood hazard polygons (ESRI Shapefile), LiDAR-based DEMs",,,,,,
+Elevation Source,IfSAR from NAMRIA + LiDAR from Phil-LiDAR 1 & 2 Programs (UP),,,,,,
+Hazard Periods,"5-year, 25-year, 100-year return period simulations",,,,,,
+Hazard Categories,"Low (Yellow), Medium (Orange), High (Red)",,,,,,
+Validation,Satellite imagery (Sentinel-2) + ground truth flooding reports,,,,,,
+License,Open Data Commons Open Database License (ODbL 1.0),,,,,,
+Format,ESRI Shapefile (.shp) — free download at noah.up.edu.ph,,,,,,
+URL,https://noah.up.edu.ph  |  https://noah.up.edu.ph/know-your-hazards,,,,,,
+Used In Roberto,25-year return period polygon layer intersected with city boundaries,,,,,,
+Source Data Also At,https://lipad-fmc.dream.upd.edu.ph (Phil-LiDAR distribution portal),,,,,,

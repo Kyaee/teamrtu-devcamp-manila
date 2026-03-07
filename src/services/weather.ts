@@ -13,11 +13,20 @@ import { deriveFloodSignal } from "./weather-signal";
 const API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
 const BASE = "https://weather.googleapis.com/v1";
 
+function assertApiKey(): void {
+  if (!API_KEY) {
+    throw new Error(
+      "Weather API key is not configured (EXPO_PUBLIC_GOOGLE_MAPS_API_KEY)",
+    );
+  }
+}
+
 export async function getCurrentConditions(
   lat: number,
   lng: number,
-): Promise<CurrentConditionsResponse> {
-  const { data } = await axios.get<CurrentConditionsResponse>(
+): Promise<CurrentConditionsResponse | null> {
+  assertApiKey();
+  const { data } = await axios.get<CurrentConditionsResponse | null>(
     `${BASE}/currentConditions:lookup`,
     {
       params: {
@@ -27,6 +36,7 @@ export async function getCurrentConditions(
       },
     },
   );
+  if (!data || typeof data !== "object" || !data.temperature) return null;
   return data;
 }
 
@@ -35,7 +45,8 @@ export async function getHourlyForecast(
   lng: number,
   hours = 24,
 ): Promise<HourlyForecastEntry[]> {
-  const { data } = await axios.get<HourlyForecastResponse>(
+  assertApiKey();
+  const { data } = await axios.get<HourlyForecastResponse | null>(
     `${BASE}/forecast.hours:lookup`,
     {
       params: {
@@ -46,7 +57,8 @@ export async function getHourlyForecast(
       },
     },
   );
-  return data.forecastHours ?? [];
+  if (!data || !Array.isArray(data.forecastHours)) return [];
+  return data.forecastHours;
 }
 
 export async function getWeatherData(
