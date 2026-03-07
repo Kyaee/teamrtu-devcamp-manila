@@ -9,9 +9,15 @@ type Props = {
   userLat?: number;
   userLng?: number;
   onSelect: (location: PlaceLocation) => void;
+  statusBadge?: React.ReactNode;
 };
 
-export function LocationSearchBar({ userLat, userLng, onSelect }: Props) {
+export function LocationSearchBar({
+  userLat,
+  userLng,
+  onSelect,
+  statusBadge,
+}: Props) {
   const [query, setQuery] = useState("");
   const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
   const [focused, setFocused] = useState(false);
@@ -46,14 +52,30 @@ export function LocationSearchBar({ userLat, userLng, onSelect }: Props) {
 
   return (
     <View style={styles.container}>
-      <TextInput
-        style={styles.input}
-        value={query}
-        onChangeText={setQuery}
-        onFocus={() => setFocused(true)}
-        placeholder="Search location..."
-        placeholderTextColor={tokens.colors.textDisabled}
-      />
+      {statusBadge ? (
+        <View style={styles.searchWithBadgeShadow}>
+          <View style={styles.searchWithBadgeInner}>
+            {statusBadge}
+            <TextInput
+              style={[styles.input, styles.inputWithBadge]}
+              value={query}
+              onChangeText={setQuery}
+              onFocus={() => setFocused(true)}
+              placeholder="Search location..."
+              placeholderTextColor={tokens.colors.textDisabled}
+            />
+          </View>
+        </View>
+      ) : (
+        <TextInput
+          style={styles.input}
+          value={query}
+          onChangeText={setQuery}
+          onFocus={() => setFocused(true)}
+          placeholder="Search location..."
+          placeholderTextColor={tokens.colors.textDisabled}
+        />
+      )}
 
       {focused && predictions.length > 0 ? (
         <View style={styles.dropdown}>
@@ -81,6 +103,15 @@ const styles = StyleSheet.create({
   container: {
     zIndex: 20,
   },
+  searchWithBadgeShadow: {
+    borderRadius: tokens.radius.md,
+    boxShadow: "0 2px 8px rgba(0,0,0,0.10)",
+    backgroundColor: "rgba(255,255,255,0.96)",
+  },
+  searchWithBadgeInner: {
+    borderRadius: tokens.radius.md,
+    overflow: "hidden",
+  },
   input: {
     backgroundColor: "rgba(255,255,255,0.96)",
     borderRadius: tokens.radius.md,
@@ -89,6 +120,11 @@ const styles = StyleSheet.create({
     fontSize: tokens.type.body,
     color: tokens.colors.textPrimary,
     boxShadow: "0 2px 8px rgba(0,0,0,0.10)",
+  },
+  inputWithBadge: {
+    borderRadius: 0,
+    boxShadow: "none",
+    backgroundColor: "transparent",
   },
   dropdown: {
     marginTop: 4,

@@ -1,7 +1,9 @@
 import { Link, useRouter } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  BackHandler,
   Pressable,
   StyleSheet,
   Text,
@@ -60,6 +62,17 @@ const SIGNAL_LABELS: Record<Severity, string> = {
   PREPARE: "Prepare",
   LEAVE: "Leave area",
   EVACUATE: "Evacuate now",
+};
+
+const SIGNAL_DESCRIPTIONS: Record<Severity, string> = {
+  MONITOR:
+    "Conditions are being monitored. Flooding is possible within the next 24-48 hours. Stay vigilant, secure loose outdoor items, and check your emergency supplies. Listen to official government broadcasts for updates.",
+  PREPARE:
+    "URGENT: Flooding is imminent. Ensure your Go-Bag is complete with 3 days of food/water, medicine, and documents. Charge all devices and power banks. Identify your nearest evacuation route and prepare to move at a moment's notice.",
+  LEAVE:
+    "CRITICAL: High risk of life-threatening flooding. Vulnerable residents, including those near waterways or in low-lying areas, must relocate to higher ground or a designated center immediately. Do not wait for conditions to worsen.",
+  EVACUATE:
+    "IMMEDIATE DANGER: Severe flooding is occurring. Your life may be at risk. Drop everything and move to the nearest safe evacuation center immediately. Do not attempt to cross flooded streets. Follow all instructions from emergency responders without delay.",
 };
 
 const ACTION_LABELS: Record<GlobalAction, string> = {
@@ -160,6 +173,20 @@ export default function HomeScreen() {
   const [direSending, setDireSending] = useState(false);
   const [direActive, setDireActive] = useState(false);
 
+  useEffect(() => {
+    if (legendVisible) {
+      const backAction = () => {
+        setLegendVisible(false);
+        return true;
+      };
+      const backHandler = BackHandler.addEventListener(
+        "hardwareBackPress",
+        backAction,
+      );
+      return () => backHandler.remove();
+    }
+  }, [legendVisible]);
+
   const signalColor = tokens.colors.severity[signal];
   const current = weather?.current ?? null;
   const forecastHours = (weather?.forecast ?? []).slice(0, 6);
@@ -225,41 +252,6 @@ export default function HomeScreen() {
       title: place.name,
       description: place.address,
     });
-  }, []);
-
-  const handleDireSituation = useCallback(async () => {
-    setDireSending(true);
-    setDireMarker({
-      id: DIRE_MARKER_ID,
-      latitude: location.latitude,
-      longitude: location.longitude,
-      pinColor: tokens.colors.danger,
-      opacity: 1,
-      title: "I need help!",
-      description: "Dire situation reported at this location",
-    });
-    mapRef.current?.animateToRegion(
-      {
-        latitude: location.latitude,
-        longitude: location.longitude,
-        latitudeDelta: 0.005,
-        longitudeDelta: 0.005,
-      },
-      500,
-    );
-    await addFloodReport(
-      "chest",
-      isConnected,
-      location.latitude,
-      location.longitude,
-    );
-    setDireSending(false);
-    setDireActive(true);
-  }, [addFloodReport, isConnected, location]);
-
-  const handleSafeNow = useCallback(() => {
-    setDireMarker(null);
-    setDireActive(false);
   }, []);
 
   const handleEvaluate = useCallback(() => {
@@ -352,18 +344,26 @@ export default function HomeScreen() {
         edges={["top"]}
         pointerEvents="box-none"
       >
-        <View style={styles.badgeRow} pointerEvents="box-none">
-          <View style={styles.statusBadge}>
-            <Text style={styles.statusBadgeText}>
-              {isConnected ? "Online" : "Offline"}
-            </Text>
-          </View>
-        </View>
-
         <LocationSearchBar
           userLat={location.latitude}
           userLng={location.longitude}
           onSelect={handleSearchSelect}
+          statusBadge={
+            <View
+              style={[
+                styles.statusBadge,
+                {
+                  backgroundColor: isConnected
+                    ? tokens.colors.safe
+                    : tokens.colors.ctaPrimary,
+                },
+              ]}
+            >
+              <Text style={styles.statusBadgeText}>
+                {isConnected ? "Online" : "Offline"}
+              </Text>
+            </View>
+          }
         />
 
         {highestSeverityAlert ? (
@@ -387,74 +387,136 @@ export default function HomeScreen() {
 
       {legendVisible ? (
         <View style={styles.legend} pointerEvents="box-none">
-          <Text style={styles.legendTitle}>Map Legend</Text>
-          <View style={styles.legendRow}>
-            <View
-              style={[
-                styles.legendDot,
-                { backgroundColor: tokens.colors.safe },
-              ]}
-            />
-            <Text style={styles.legendLabel}>Evacuation Center</Text>
+          <View style={styles.legendHeaderSection}>
+            <Text style={styles.legendSectionTitle}>Map Filters</Text>
+            <Pressable
+              onPress={() => setLegendVisible(false)}
+              style={styles.closeLegendIcon}
+            >
+              <Text style={styles.closeLegendText}>{"\u2715"}</Text>
+            </Pressable>
           </View>
 
-          <Text style={styles.legendTitle}>Flood Depth Reports</Text>
-          {depthButtons.map((d) => (
-            <View key={d.id} style={styles.legendRow}>
+          <View style={styles.legendSection}>
+            <Text style={styles.legendTitle}>Visibility Toggles</Text>
+            <Pressable
+              onPress={() => setShowFloodLayer((v) => !v)}
+              style={styles.layerToggle}
+            >
               <View
                 style={[
-                  styles.legendDot,
-                  { backgroundColor: DEPTH_COLORS[d.id] },
+                  styles.toggleIndicator,
+                  showFloodLayer && styles.toggleActive,
                 ]}
-              />
-              <Text style={styles.legendLabel}>{d.label}</Text>
-            </View>
-          ))}
+              >
+                {showFloodLayer ? (
+                  <Text
+                    style={{ color: "#FFF", fontSize: 14, fontWeight: "800" }}
+                  >
+                    {"\u2713"}
+                  </Text>
+                ) : null}
+              </View>
+              <Text style={styles.legendRowText}>City Flood Hazard Zones</Text>
+            </Pressable>
 
-          <Pressable
-            onPress={() => setShowFloodLayer((v) => !v)}
-            style={styles.layerToggle}
-          >
-            <View
-              style={[
-                styles.toggleIndicator,
-                showFloodLayer && styles.toggleActive,
-              ]}
-            />
-            <Text style={styles.legendTitle}>City Flood Hazard Zones</Text>
-          </Pressable>
-          {(["High", "MediumHigh", "Medium", "Low"] as const).map((level) => (
-            <View key={level} style={styles.legendRow}>
+            <Pressable
+              onPress={() => setShowDpwhLayer((v) => !v)}
+              style={styles.layerToggle}
+            >
               <View
                 style={[
-                  styles.legendDot,
-                  { backgroundColor: HAZARD_COLORS[level] },
+                  styles.toggleIndicator,
+                  showDpwhLayer && styles.toggleActive,
                 ]}
-              />
-              <Text style={styles.legendLabel}>{HAZARD_LABELS[level]}</Text>
+              >
+                {showDpwhLayer ? (
+                  <Text
+                    style={{ color: "#FFF", fontSize: 14, fontWeight: "800" }}
+                  >
+                    {"\u2713"}
+                  </Text>
+                ) : null}
+              </View>
+              <Text style={styles.legendRowText}>DPWH Projects</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.legendSectionDivider} />
+
+          <View style={styles.legendSection}>
+            <Text style={styles.legendTitle}>Map Legend</Text>
+            <View style={styles.legendGrid}>
+              <View style={styles.legendRow}>
+                <View
+                  style={[
+                    styles.legendDot,
+                    { backgroundColor: tokens.colors.safe },
+                  ]}
+                />
+                <Text style={styles.legendLabel}>Evacuation Center</Text>
+              </View>
+
+              <View style={styles.legendRow}>
+                <View
+                  style={[styles.legendDot, { backgroundColor: "#3B82F6" }]}
+                />
+                <Text style={styles.legendLabel}>DPWH: On-Going</Text>
+              </View>
+
+              <View style={styles.legendRow}>
+                <View
+                  style={[styles.legendDot, { backgroundColor: "#6B7280" }]}
+                />
+                <Text style={styles.legendLabel}>DPWH: Completed</Text>
+              </View>
             </View>
-          ))}
+
+            <Text style={[styles.legendTitle, { marginTop: 12 }]}>
+              Flood Depth Reports
+            </Text>
+            <View style={styles.legendGrid}>
+              {depthButtons.map((d) => (
+                <View key={d.id} style={styles.legendRow}>
+                  <View
+                    style={[
+                      styles.legendDot,
+                      { backgroundColor: DEPTH_COLORS[d.id] },
+                    ]}
+                  />
+                  <Text style={styles.legendLabel}>{d.label}</Text>
+                </View>
+              ))}
+            </View>
+
+            <Text style={[styles.legendTitle, { marginTop: 12 }]}>
+              Hazard Levels
+            </Text>
+            <View style={styles.legendGrid}>
+              {(["Low", "Medium", "MediumHigh", "High"] as const).map(
+                (level) => (
+                  <View key={level} style={styles.legendRow}>
+                    <View
+                      style={[
+                        styles.legendDot,
+                        { backgroundColor: HAZARD_COLORS[level] },
+                      ]}
+                    />
+                    <Text style={styles.legendLabel}>
+                      {HAZARD_LABELS[level]}
+                    </Text>
+                  </View>
+                ),
+              )}
+            </View>
+          </View>
 
           <Pressable
-            onPress={() => setShowDpwhLayer((v) => !v)}
-            style={styles.layerToggle}
+            onPress={() => setLegendVisible(false)}
+            style={styles.hideLegendButton}
           >
-            <View
-              style={[
-                styles.toggleIndicator,
-                showDpwhLayer && styles.toggleActive,
-              ]}
-            />
-            <Text style={styles.legendTitle}>DPWH Projects</Text>
+            <Text style={styles.hideLegendButtonText}>Apply Filters</Text>
           </Pressable>
-          <View style={styles.legendRow}>
-            <View style={[styles.legendDot, { backgroundColor: "#3B82F6" }]} />
-            <Text style={styles.legendLabel}>On-Going</Text>
-          </View>
-          <View style={styles.legendRow}>
-            <View style={[styles.legendDot, { backgroundColor: "#6B7280" }]} />
-            <Text style={styles.legendLabel}>Completed</Text>
-          </View>
         </View>
       ) : null}
 
@@ -491,22 +553,38 @@ export default function HomeScreen() {
               >
                 <Text
                   style={[
+                    styles.legendButtonIcon,
+                    legendVisible && styles.legendButtonIconActive,
+                  ]}
+                >
+                  {"\u25BC"}
+                </Text>
+                <Text
+                  style={[
                     styles.legendButtonText,
                     legendVisible && styles.legendButtonTextActive,
                   ]}
                 >
-                  {legendVisible ? "Hide Legend" : "Legend"}
+                  Filters
                 </Text>
               </Pressable>
 
               {!weatherLoading ? (
-                <View
+                <Pressable
+                  onLongPress={() => {
+                    Alert.alert(
+                      `${SIGNAL_LABELS[signal]} Status`,
+                      SIGNAL_DESCRIPTIONS[signal],
+                      [{ text: "Got it" }],
+                    );
+                  }}
                   style={[styles.signalBadge, { backgroundColor: signalColor }]}
                 >
+                  <Text style={styles.signalBadgeIcon}>{"\u26A0"}</Text>
                   <Text style={styles.signalBadgeText}>
                     {SIGNAL_LABELS[signal]}
                   </Text>
-                </View>
+                </Pressable>
               ) : null}
             </View>
           }
@@ -768,33 +846,32 @@ const styles = StyleSheet.create({
     gap: tokens.spacing.sm,
     paddingHorizontal: tokens.spacing.md,
   },
-  badgeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: tokens.spacing.sm,
-    paddingTop: tokens.spacing.xs,
-  },
   statusBadge: {
-    flex: 1,
-    backgroundColor: "rgba(255,255,255,0.92)",
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: tokens.radius.pill,
-    boxShadow: "0 1px 4px rgba(0,0,0,0.10)",
+    paddingVertical: 4,
+    alignItems: "center",
+    justifyContent: "center",
   },
   statusBadgeText: {
-    color: tokens.colors.textPrimary,
-    fontSize: tokens.type.label,
+    color: "#FFFFFF",
+    fontSize: 10,
     fontWeight: "600",
   },
   signalBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: tokens.radius.pill,
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 10,
+    borderRadius: tokens.radius.md,
+    borderCurve: "continuous",
+    justifyContent: "center",
   },
+  signalBadgeIcon: { fontSize: 14, color: "#FFFFFF" },
   signalBadgeText: {
     color: "#FFFFFF",
-    fontSize: tokens.type.label,
+    fontSize: 12,
     fontWeight: "700",
   },
 
@@ -824,81 +901,153 @@ const styles = StyleSheet.create({
     paddingBottom: tokens.spacing.sm,
   },
   gpsButton: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     backgroundColor: tokens.colors.surfaceAlt,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: tokens.radius.md,
-    borderCurve: "continuous",
-  },
-  gpsButtonIcon: { fontSize: 18, color: tokens.colors.ctaPrimary },
-  gpsButtonText: {
-    color: tokens.colors.textPrimary,
-    fontSize: tokens.type.label,
-    fontWeight: "700",
-  },
-  legendButton: {
-    backgroundColor: tokens.colors.surfaceAlt,
-    paddingHorizontal: 14,
+    paddingHorizontal: 4,
     paddingVertical: 10,
     borderRadius: tokens.radius.md,
     borderCurve: "continuous",
     justifyContent: "center",
   },
+  gpsButtonIcon: { fontSize: 16, color: tokens.colors.ctaPrimary },
+  gpsButtonText: {
+    color: tokens.colors.textPrimary,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  legendButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: tokens.colors.surfaceAlt,
+    paddingHorizontal: 4,
+    paddingVertical: 10,
+    borderRadius: tokens.radius.md,
+    borderCurve: "continuous",
+    justifyContent: "center",
+  },
+  legendButtonIcon: { fontSize: 14, color: tokens.colors.ctaPrimary },
   legendButtonActive: { backgroundColor: tokens.colors.ctaPrimary },
   legendButtonText: {
     color: tokens.colors.textPrimary,
-    fontSize: tokens.type.label,
+    fontSize: 12,
     fontWeight: "700",
   },
   legendButtonTextActive: { color: "#FFFFFF" },
+  legendButtonIconActive: { color: "#FFFFFF" },
 
   legend: {
     position: "absolute",
     bottom: PANEL_COLLAPSED + tokens.spacing.md,
-    left: tokens.spacing.sm,
+    left: tokens.spacing.md,
+    right: tokens.spacing.md,
     zIndex: 12,
     backgroundColor: "rgba(255,255,255,0.98)",
-    borderRadius: tokens.radius.md,
+    borderRadius: tokens.radius.lg,
     padding: tokens.spacing.md,
-    gap: 4,
+    gap: 12,
     borderWidth: 1,
     borderColor: tokens.colors.border,
-    boxShadow: "0 4px 16px rgba(0,0,0,0.14)",
+    boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
     borderCurve: "continuous",
-    maxWidth: 220,
+  },
+  legendHeaderSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  legendSectionTitle: {
+    color: tokens.colors.textPrimary,
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  closeLegendIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: tokens.colors.surfaceAlt,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  closeLegendText: {
+    fontSize: 12,
+    color: tokens.colors.textPrimary,
+    fontWeight: "800",
+  },
+  legendSection: { gap: 8 },
+  legendSectionDivider: {
+    height: 1,
+    backgroundColor: tokens.colors.border,
+    marginVertical: 4,
   },
   legendTitle: {
-    color: tokens.colors.textPrimary,
-    fontSize: tokens.type.label,
-    fontWeight: "700",
+    color: tokens.colors.textDisabled,
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
     marginBottom: 2,
   },
   legendRow: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: 6,
+    gap: 8,
+    marginBottom: 4,
   },
-  legendDot: { width: 10, height: 10, borderRadius: 5 },
-  legendLabel: { color: tokens.colors.textSecondary, fontSize: 12 },
+  legendGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: tokens.spacing.sm,
+  },
+  legendDot: { width: 12, height: 12, borderRadius: 6 },
+  legendLabel: {
+    color: tokens.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  legendRowText: {
+    color: tokens.colors.textPrimary,
+    fontSize: 15,
+    fontWeight: "600",
+  },
   layerToggle: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    marginTop: 6,
+    gap: 12,
+    paddingVertical: 4,
   },
   toggleIndicator: {
-    width: 10,
-    height: 10,
-    borderRadius: 2,
-    borderWidth: 1.5,
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    borderWidth: 2,
     borderColor: tokens.colors.textDisabled,
+    backgroundColor: "transparent",
+    alignItems: "center",
+    justifyContent: "center",
   },
   toggleActive: {
     backgroundColor: tokens.colors.ctaPrimary,
     borderColor: tokens.colors.ctaPrimary,
+  },
+  hideLegendButton: {
+    marginTop: 8,
+    paddingVertical: 14,
+    backgroundColor: tokens.colors.ctaPrimary,
+    borderRadius: tokens.radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+  },
+  hideLegendButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "700",
   },
 
   card: {
