@@ -19,7 +19,12 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyCEgzteo2ddIO_NDqeAV_yLARaAIS3574M"
+        }
+      }
     },
     "web": {
       "output": "static",
@@ -39,7 +44,13 @@
           }
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "AGOS needs your location to show nearby flood reports, evacuation centers, and route guidance."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
