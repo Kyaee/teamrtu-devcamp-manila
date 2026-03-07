@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import RNMapView, {
   Marker,
+  Polygon,
   Polyline,
   PROVIDER_GOOGLE,
 } from "react-native-maps";
@@ -24,6 +25,7 @@ import type {
   MapDisplayRef,
   MapMarker,
   MapRegion,
+  MapZone,
   RouteOverlay,
 } from "./MapDisplay";
 
@@ -32,10 +34,12 @@ type MapDisplayProps = {
   markers: MapMarker[];
   routeOverlay?: RouteOverlay | null;
   polylines?: RouteOverlay[];
+  zones?: MapZone[];
   activeStepIndex?: number;
   showsMyLocationButton?: boolean;
   onRegionChangeComplete?: (region: MapRegion) => void;
   onMarkerPress?: (marker: MapMarker) => void;
+  onZonePress?: (zone: MapZone) => void;
 };
 
 const MapDisplay = forwardRef<MapDisplayRef, MapDisplayProps>(
@@ -45,9 +49,11 @@ const MapDisplay = forwardRef<MapDisplayRef, MapDisplayProps>(
       markers,
       routeOverlay,
       polylines,
+      zones,
       showsMyLocationButton = true,
       onRegionChangeComplete,
       onMarkerPress,
+      onZonePress,
     },
     ref,
   ) {
@@ -95,6 +101,17 @@ const MapDisplay = forwardRef<MapDisplayRef, MapDisplayProps>(
           onError={handleMapError}
           onRegionChangeComplete={onRegionChangeComplete}
         >
+          {zones?.map((z) => (
+            <Polygon
+              key={z.id}
+              coordinates={z.coordinates}
+              fillColor={z.fillColor}
+              strokeColor={z.strokeColor}
+              strokeWidth={z.strokeWidth ?? 2}
+              tappable={z.tappable !== false}
+              onPress={onZonePress ? () => onZonePress(z) : undefined}
+            />
+          ))}
           {routeOverlay ? (
             <Polyline
               coordinates={routeOverlay.polyline}
