@@ -17,6 +17,7 @@ import { AlertCard } from "@/src/features/alerts/alert-card";
 import { useAlerts } from "@/src/features/alerts/use-alerts";
 import { useWeatherSignal } from "@/src/features/alerts/use-weather-signal";
 import { useCenters } from "@/src/features/centers/use-centers";
+import { useGeminiCenter } from "@/src/features/centers/use-gemini-center";
 import type { GlobalAction } from "@/src/features/decision-engine/types";
 import { useEvacuationDecision } from "@/src/features/decision-engine/use-evacuation-decision";
 import { HomeFloatingPanel } from "@/src/features/home/HomeFloatingPanel";
@@ -36,12 +37,19 @@ import {
 } from "@/src/features/map/use-flood-coverage";
 import { useFloodStreetHighlights } from "@/src/features/map/use-flood-street-highlights";
 import { useMapReports } from "@/src/features/map/use-map-reports";
+import {
+  useUrgentMarkers,
+  getUrgentPinColor,
+} from "@/src/features/map/use-urgent-markers";
 import { useUserLocation } from "@/src/features/map/use-user-location";
 import { useConnectivity } from "@/src/features/offline/use-connectivity";
 import type { LatLng, RouteResult } from "@/src/services/maps";
 import { getRouteGuidance } from "@/src/services/maps";
 import type { PlaceLocation } from "@/src/services/places";
 import type { FloodReport, ReportDepth } from "@/src/types/domain";
+import { useChecklistStore } from "@/src/store/checklist-store";
+import { usePreparedness } from "@/src/features/preparedness/use-preparedness";
+import { useAppSlice } from "@/src/store/app-slice";
 import type { HourlyForecastEntry } from "@/src/types/weather";
 
 const DEPTH_COLORS: Record<ReportDepth, string> = {
@@ -153,8 +161,18 @@ export default function HomeScreen() {
     location?.longitude,
     highestSeverityAlert?.severity,
   );
+
+  const {
+    centers,
+    loading: centersLoading,
+    refresh: refreshCenters,
+  } = useCenters(location.latitude, location.longitude);
   const { floodReports, drainReports, reportsLoaded, addFloodReport } =
     useMapReports();
+  const { choice: geminiChoice, loading: geminiLoading } = useGeminiCenter(
+    location.latitude,
+    location.longitude,
+    centers,
   const { centers, loading: centersLoading } = useCenters(
     location?.latitude,
     location?.longitude,
@@ -165,6 +183,7 @@ export default function HomeScreen() {
     evaluate: runDecision,
   } = useEvacuationDecision();
 
+  const { urgentMarkers } = useUrgentMarkers();
   const { entries: floodEntries, zones: floodZones } = useFloodCoverage();
   const { markers: dpwhMarkers, getProjectById } = useDpwhProjects();
   const streetHighlights = useFloodStreetHighlights(floodEntries);
@@ -180,6 +199,31 @@ export default function HomeScreen() {
   const [direActive, setDireActive] = useState(false);
   const [selectedFloodReport, setSelectedFloodReport] =
     useState<FloodReport | null>(null);
+
+  const { latestAssessment } = useAppSlice();
+  const { mergeAiChecklist } = usePreparedness();
+  const { mergeAiChecklist: mergeSharedChecklist } = useChecklistStore();
+  const assessmentIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!latestAssessment) return;
+    const id = `${latestAssessment.urgencyLevel}-${latestAssessment.summary.slice(0, 20)}`;
+    if (assessmentIdRef.current === id) return;
+    assessmentIdRef.current = id;
+
+    refreshCenters();
+
+    if (latestAssessment.checklistItems.length > 0) {
+      mergeAiChecklist(latestAssessment.checklistItems);
+      // FR-7: Also merge into the shared checklist store for cross-page sync
+      mergeSharedChecklist(latestAssessment.checklistItems);
+    }
+  }, [
+    latestAssessment,
+    refreshCenters,
+    mergeAiChecklist,
+    mergeSharedChecklist,
+  ]);
 
   useEffect(() => {
     if (legendVisible) {
@@ -482,6 +526,22 @@ export default function HomeScreen() {
         category: "center",
       });
     }
+    for (const u of urgentMarkers) {
+      result.push({
+        id: `urgent-${u.id}`,
+        latitude: u.lat,
+        longitude: u.lng,
+        // FR-6: Purple pin for "urgent to save", red for "high"
+        pinColor: getUrgentPinColor(u.urgencyLevel),
+        opacity: 1,
+        title:
+          u.urgencyLevel === "very_urgent"
+            ? "\u{1F7E3} URGENT TO SAVE"
+            : "NEED HELP",
+        description: u.summary || "Urgent rescue request",
+        category: "urgent_rescue",
+      });
+    }
 
     for (const r of floodReports) {
       result.push({
@@ -736,6 +796,16 @@ export default function HomeScreen() {
                 />
                 <Text style={styles.legendLabel}>DPWH: Completed</Text>
               </View>
+
+              <View style={styles.legendRow}>
+                <View
+                  style={[
+                    styles.legendDot,
+                    { backgroundColor: tokens.colors.danger },
+                  ]}
+                />
+                <Text style={styles.legendLabel}>Urgent Rescue</Text>
+              </View>
             </View>
 
             <Text style={[styles.legendTitle, { marginTop: 12 }]}>
@@ -856,6 +926,26 @@ export default function HomeScreen() {
             </View>
           }
         >
+          {/* Request for Help */}
+          <Pressable
+            style={styles.helpButton}
+            onPress={() =>
+              router.push({
+                pathname: "/request-help",
+                params: { autoStartVoice: "1" },
+              } as never)
+            }
+          >
+            <Text style={styles.helpButtonIcon}>{"\u26A0"}</Text>
+            <View style={styles.helpButtonContent}>
+              <Text style={styles.helpButtonTitle}>Humingi ng Tulong</Text>
+              <Text style={styles.helpButtonSub}>
+                AI assessment ng sitwasyon mo
+              </Text>
+            </View>
+            <Text style={styles.helpButtonArrow}>{"\u203A"}</Text>
+          </Pressable>
+
           {/* Panahon card */}
           <View
             style={[styles.card, { borderWidth: 1, borderColor: signalColor }]}
@@ -1467,6 +1557,38 @@ const styles = StyleSheet.create({
   },
   freshness: { color: tokens.colors.textDisabled, fontSize: 11 },
 
+  helpButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing.sm,
+    backgroundColor: tokens.colors.danger,
+    borderRadius: tokens.radius.lg,
+    padding: tokens.spacing.md,
+    borderCurve: "continuous",
+    boxShadow: "0 2px 12px rgba(239,68,68,0.30)",
+  },
+  helpButtonIcon: {
+    fontSize: 24,
+    color: "#FFFFFF",
+  },
+  helpButtonContent: {
+    flex: 1,
+    gap: 2,
+  },
+  helpButtonTitle: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  helpButtonSub: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 12,
+  },
+  helpButtonArrow: {
+    color: "#FFFFFF",
+    fontSize: 24,
+    fontWeight: "300",
+  },
   direButton: {
     minHeight: 52,
     borderRadius: tokens.radius.md,

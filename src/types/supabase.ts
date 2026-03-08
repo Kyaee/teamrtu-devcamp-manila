@@ -119,3 +119,20 @@ export type NearbyReportSummaryRow = {
   flood_confirmed_high_count: number;
   drain_count: number;
 };
+
+/** Row from the urgent_rescue_markers table */
+export type DbUrgentRescueMarker = {
+  id: string;
+  location: string;
+  urgency_level: "high" | "very_urgent";
+  summary: string;
+  status: "active" | "resolved";
+  created_at: string;
+};
+
+export type UrgentRescueMarkerInsert = {
+  location: string;
+  urgency_level: "high" | "very_urgent";
+  summary: string;
+  status?: "active" | "resolved";
+};

@@ -131,7 +131,7 @@ export function useCenters(userLat?: number, userLng?: number) {
     return () => {
       cancelled = true;
     };
-  }, [userLat, userLng]);
+  }, [lat, lng, userLat, userLng, refreshKey]);
 
   const centers = useMemo<EvacCenter[]>(() => {
     if (!openOnly) return allCenters;
@@ -144,5 +144,6 @@ export function useCenters(userLat?: number, userLng?: number) {
     setOpenOnly,
     loading,
     error,
+    refresh,
   };
 }

@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
+import type { ChecklistItem } from "@/src/types/ai";
 import type { PreparednessTask } from "@/src/types/domain";
 
 const initialTasks: PreparednessTask[] = [
@@ -34,10 +35,26 @@ export function usePreparedness() {
     );
   };
 
+  const mergeAiChecklist = useCallback((items: ChecklistItem[]) => {
+    setTasks((prev) => {
+      const existingLabels = new Set(prev.map((t) => t.label.toLowerCase()));
+      const newTasks: PreparednessTask[] = items
+        .filter((item) => !existingLabels.has(item.label.toLowerCase()))
+        .map((item, i) => ({
+          id: `ai-${Date.now()}-${i}`,
+          label: item.label,
+          category: item.category,
+          level: "moderate" as const,
+          done: false,
+        }));
+      return [...prev, ...newTasks];
+    });
+  }, []);
+
   const completion = useMemo(() => {
     const done = tasks.filter((task) => task.done).length;
     return `${done}/${tasks.length}`;
   }, [tasks]);
 
-  return { tasks, toggleTask, completion };
+  return { tasks, toggleTask, completion, mergeAiChecklist };
 }

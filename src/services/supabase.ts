@@ -10,10 +10,12 @@ import type {
   DbDrainReportRaw,
   DbFloodReport,
   DbFloodReportRaw,
+  DbUrgentRescueMarker,
   DrainReportInsert,
   FloodReportInsert,
   NearbyEvacCenterRow,
   NearbyReportSummaryRow,
+  UrgentRescueMarkerInsert,
 } from "@/src/types/supabase";
 
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -260,6 +262,63 @@ const EMPTY_SUMMARY: NearbyReportSummaryRow = {
   flood_confirmed_high_count: 0,
   drain_count: 0,
 };
+
+// ---------------------------------------------------------------------------
+// Urgent Rescue Markers
+// ---------------------------------------------------------------------------
+
+export async function fetchUrgentRescueMarkers(): Promise<
+  DbUrgentRescueMarker[]
+> {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("urgent_rescue_markers")
+    .select("*")
+    .eq("status", "active")
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error) throw error;
+  return (data as DbUrgentRescueMarker[] | null) ?? [];
+}
+
+export async function insertUrgentRescueMarker(
+  marker: UrgentRescueMarkerInsert,
+): Promise<DbUrgentRescueMarker | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("urgent_rescue_markers")
+    .insert(marker)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as DbUrgentRescueMarker | null;
+}
+
+export function subscribeToUrgentRescueMarkers(
+  onPayload: (row: DbUrgentRescueMarker) => void,
+): RealtimeChannel | null {
+  if (!supabase) return null;
+  return supabase
+    .channel("urgent-rescue-markers-realtime")
+    .on<DbUrgentRescueMarker>(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "urgent_rescue_markers" },
+      (payload) => {
+        if (
+          payload.new &&
+          typeof payload.new === "object" &&
+          "id" in payload.new
+        ) {
+          onPayload(payload.new as DbUrgentRescueMarker);
+        }
+      },
+    )
+    .subscribe();
+}
+
+// ---------------------------------------------------------------------------
+// Nearby Report Summary (aggregated counts for risk context)
+// ---------------------------------------------------------------------------
 
 export async function fetchNearbyReportSummary(
   lat: number,

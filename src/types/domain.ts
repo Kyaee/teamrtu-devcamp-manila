@@ -51,6 +51,17 @@ export type EvacCenter = {
 export type PreparednessTask = {
   id: string;
   label: string;
+  category?: string;
   level: "easy" | "moderate" | "complex";
   done: boolean;
+};
+
+export type UrgentRescueMarker = {
+  id: string;
+  lat: number;
+  lng: number;
+  urgencyLevel: "high" | "very_urgent";
+  summary: string;
+  status: "active" | "resolved";
+  createdAt: string;
 };
