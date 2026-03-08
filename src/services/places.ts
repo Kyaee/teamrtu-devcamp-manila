@@ -140,36 +140,39 @@ export async function searchNearbyShelters(
   const types: ShelterType[] = ["school", "hospital", "shopping_mall"];
   const results: NearbyPlace[] = [];
 
-  await Promise.all(
-    types.map(async (type) => {
-      try {
-        const { data } = await axios.get(`${PLACES_BASE}/nearbysearch/json`, {
-          params: {
-            location: `${lat},${lng}`,
-            radius: radiusM,
-            type,
-            key: API_KEY,
-          },
-          timeout: 10000,
-        });
+  // Fetch sequentially to avoid parallel network errors on mobile
+  for (const type of types) {
+    try {
+      const { data } = await axios.get(`${PLACES_BASE}/nearbysearch/json`, {
+        params: {
+          location: `${lat},${lng}`,
+          radius: radiusM,
+          type,
+          key: API_KEY,
+        },
+        timeout: 10000,
+      });
 
-        if (data.status !== "OK") return;
-
-        for (const place of data.results ?? []) {
-          if (!place.geometry?.location) continue;
-          results.push({
-            placeId: place.place_id,
-            name: place.name,
-            latitude: place.geometry.location.lat,
-            longitude: place.geometry.location.lng,
-            shelterType: type,
-          });
-        }
-      } catch {
-        // degrade gracefully per type
+      if (data.status !== "OK") {
+        console.warn(`[Places] ${type} search status: ${data.status}`);
+        continue;
       }
-    }),
-  );
+
+      for (const place of data.results ?? []) {
+        if (!place.geometry?.location) continue;
+        results.push({
+          placeId: place.place_id,
+          name: place.name,
+          latitude: place.geometry.location.lat,
+          longitude: place.geometry.location.lng,
+          shelterType: type,
+        });
+      }
+    } catch (err: any) {
+      console.warn(`[Places] ${type} search failed:`, err?.message ?? err);
+      // degrade gracefully per type
+    }
+  }
 
   return results;
 }

@@ -7,6 +7,7 @@ import {
 import type {
   DbAlert,
   DbDrainReport,
+  DbDrainReportRaw,
   DbFloodReport,
   DbFloodReportRaw,
   DbUrgentRescueMarker,
@@ -135,6 +136,65 @@ export async function insertDrainReport(
     .single();
   if (error) throw error;
   return data;
+}
+
+export function subscribeToDrainReports(
+  onInsert: (report: DbDrainReportRaw) => void,
+): RealtimeChannel | null {
+  if (!supabase) return null;
+  return supabase
+    .channel("drain-reports-realtime")
+    .on<DbDrainReportRaw>(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "drain_reports" },
+      (payload) => {
+        if (
+          payload.new &&
+          typeof payload.new === "object" &&
+          "id" in payload.new
+        ) {
+          onInsert(payload.new as DbDrainReportRaw);
+        }
+      },
+    )
+    .subscribe();
+}
+
+// ---------------------------------------------------------------------------
+// Storage — report photo uploads
+// ---------------------------------------------------------------------------
+
+/**
+ * Upload a photo from a local file URI to Supabase Storage (`image` bucket).
+ * Returns the public URL on success, or null if unavailable.
+ */
+export async function uploadReportPhoto(
+  localUri: string,
+  reportId: string,
+  kind: "flood" | "drain",
+): Promise<string | null> {
+  if (!supabase) return null;
+
+  // Read the file as a blob from the local URI
+  const response = await fetch(localUri);
+  const blob = await response.blob();
+
+  const ext = localUri.split(".").pop()?.toLowerCase() ?? "jpg";
+  const path = `reports/${kind}/${reportId}.${ext}`;
+
+  const { error } = await supabase.storage.from("image").upload(path, blob, {
+    contentType: `image/${ext === "png" ? "png" : "jpeg"}`,
+    upsert: true,
+  });
+
+  if (error) {
+    console.warn("Photo upload failed:", error.message);
+    return null;
+  }
+
+  const { data: urlData } = supabase.storage.from("image").getPublicUrl(path);
+
+  return urlData?.publicUrl ?? null;
 }
 
 // ---------------------------------------------------------------------------

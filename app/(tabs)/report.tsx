@@ -1,3 +1,5 @@
+import { Image } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
 import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -74,9 +76,11 @@ export default function ReportScreen() {
   const [drainText, setDrainText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [lastResult, setLastResult] = useState<string | null>(null);
+  const [floodPhotoUri, setFloodPhotoUri] = useState<string | null>(null);
+  const [drainPhotoUri, setDrainPhotoUri] = useState<string | null>(null);
 
   const { isConnected } = useConnectivity();
-  const { location } = useUserLocation();
+  const { location } = useUserLocation(); // location is null until GPS resolves
   const {
     floodReports,
     drainReports,
@@ -92,6 +96,7 @@ export default function ReportScreen() {
 
   const handleFloodSubmit = useCallback(
     async (depth: ReportDepth) => {
+      if (!location) return;
       setSubmitting(true);
       setLastResult(null);
       try {
@@ -100,23 +105,26 @@ export default function ReportScreen() {
           isConnected,
           location.latitude,
           location.longitude,
+          floodPhotoUri,
         );
         const label = DEPTH_OPTIONS.find((d) => d.id === depth)?.label ?? depth;
+        const photoNote = floodPhotoUri ? " · 📷 Photo uploaded" : "";
         setLastResult(
           isConnected
-            ? `Flood report (${label}) submitted`
-            : `Flood report (${label}) queued for sync`,
+            ? `Flood report (${label}) submitted${photoNote}`
+            : `Flood report (${label}) queued for sync${photoNote}`,
         );
+        setFloodPhotoUri(null);
       } catch {
         setLastResult("Failed to submit report");
       }
       setSubmitting(false);
     },
-    [addFloodReport, isConnected, location],
+    [addFloodReport, isConnected, location, floodPhotoUri],
   );
 
   const handleDrainSubmit = useCallback(async () => {
-    if (!drainText.trim()) return;
+    if (!drainText.trim() || !location) return;
     setSubmitting(true);
     setLastResult(null);
     try {
@@ -125,22 +133,46 @@ export default function ReportScreen() {
         isConnected,
         location.latitude,
         location.longitude,
+        drainPhotoUri,
       );
+      const photoNote = drainPhotoUri ? " · 📷 Photo uploaded" : "";
       setLastResult(
-        isConnected ? "Drain report submitted" : "Drain report queued for sync",
+        isConnected
+          ? `Drain report submitted${photoNote}`
+          : `Drain report queued for sync${photoNote}`,
       );
       setDrainText("");
+      setDrainPhotoUri(null);
     } catch {
       setLastResult("Failed to submit report");
     }
     setSubmitting(false);
-  }, [addDrainReport, drainText, isConnected, location]);
+  }, [addDrainReport, drainText, isConnected, location, drainPhotoUri]);
 
   const handleSync = useCallback(async () => {
     setSubmitting(true);
     await syncQueuedReports();
     setSubmitting(false);
   }, [syncQueuedReports]);
+
+  const openCamera = useCallback(async (target: "flood" | "drain") => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") return;
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images"],
+      quality: 0.7,
+      allowsEditing: false,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      if (target === "flood") {
+        setFloodPhotoUri(result.assets[0].uri);
+      } else {
+        setDrainPhotoUri(result.assets[0].uri);
+      }
+    }
+  }, []);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -241,6 +273,45 @@ export default function ReportScreen() {
               ))}
             </View>
 
+            {/* Camera photo section */}
+            <View style={styles.photoSection}>
+              <Text style={styles.photoLabel}>📷 Magdagdag ng larawan</Text>
+              {floodPhotoUri ? (
+                <View style={styles.photoPreviewWrap}>
+                  <Image
+                    source={{ uri: floodPhotoUri }}
+                    style={styles.photoPreview}
+                    contentFit="cover"
+                  />
+                  <View style={styles.photoTakenBadge}>
+                    <Text style={styles.photoTakenText}>✓ Picture taken</Text>
+                  </View>
+                  <View style={styles.photoActions}>
+                    <Pressable
+                      style={styles.retakeBtn}
+                      onPress={() => openCamera("flood")}
+                    >
+                      <Text style={styles.retakeBtnText}>Kunan ulit</Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.removeBtn}
+                      onPress={() => setFloodPhotoUri(null)}
+                    >
+                      <Text style={styles.removeBtnText}>Alisin</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : (
+                <Pressable
+                  style={styles.cameraButton}
+                  onPress={() => openCamera("flood")}
+                >
+                  <Text style={styles.cameraButtonIcon}>📸</Text>
+                  <Text style={styles.cameraButtonText}>Kunan ng larawan</Text>
+                </Pressable>
+              )}
+            </View>
+
             <Text style={styles.hint}>{confirmationHint}</Text>
 
             {/* Recent flood reports */}
@@ -265,6 +336,7 @@ export default function ReportScreen() {
                       <View style={styles.recentContent}>
                         <Text style={styles.recentLabel}>
                           {opt?.label ?? r.depth} depth
+                          {r.photoUrl ? " 📷" : ""}
                         </Text>
                         <Text style={styles.recentMeta}>
                           {r.status === "confirmed" ? "Confirmed" : "Pending"}
@@ -297,6 +369,45 @@ export default function ReportScreen() {
               editable={!submitting}
             />
 
+            {/* Camera photo section */}
+            <View style={styles.photoSection}>
+              <Text style={styles.photoLabel}>📷 Magdagdag ng larawan</Text>
+              {drainPhotoUri ? (
+                <View style={styles.photoPreviewWrap}>
+                  <Image
+                    source={{ uri: drainPhotoUri }}
+                    style={styles.photoPreview}
+                    contentFit="cover"
+                  />
+                  <View style={styles.photoTakenBadge}>
+                    <Text style={styles.photoTakenText}>✓ Picture taken</Text>
+                  </View>
+                  <View style={styles.photoActions}>
+                    <Pressable
+                      style={styles.retakeBtn}
+                      onPress={() => openCamera("drain")}
+                    >
+                      <Text style={styles.retakeBtnText}>Kunan ulit</Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.removeBtn}
+                      onPress={() => setDrainPhotoUri(null)}
+                    >
+                      <Text style={styles.removeBtnText}>Alisin</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : (
+                <Pressable
+                  style={styles.cameraButton}
+                  onPress={() => openCamera("drain")}
+                >
+                  <Text style={styles.cameraButtonIcon}>📸</Text>
+                  <Text style={styles.cameraButtonText}>Kunan ng larawan</Text>
+                </Pressable>
+              )}
+            </View>
+
             <Pressable
               style={({ pressed }) => [
                 styles.submitButton,
@@ -327,6 +438,7 @@ export default function ReportScreen() {
                     <View style={styles.recentContent}>
                       <Text style={styles.recentLabel} numberOfLines={1}>
                         {d.description}
+                        {d.photoUrl ? " 📷" : ""}
                       </Text>
                       <Text style={styles.recentMeta}>
                         {d.status === "confirmed" ? "Confirmed" : "Pending"}
@@ -375,7 +487,10 @@ export default function ReportScreen() {
         {/* GPS notice */}
         <View style={styles.gpsNotice}>
           <Text style={styles.gpsText}>
-            GPS: {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
+            GPS:{" "}
+            {location
+              ? `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`
+              : "Fetching..."}
           </Text>
           <Text style={styles.gpsHint}>
             Ang iyong kasalukuyang lokasyon ang gagamitin sa report.
@@ -647,5 +762,89 @@ const styles = StyleSheet.create({
   gpsHint: {
     color: tokens.colors.textDisabled,
     fontSize: 11,
+  },
+
+  // Camera / photo styles
+  photoSection: {
+    gap: tokens.spacing.sm,
+  },
+  photoLabel: {
+    color: tokens.colors.textSecondary,
+    fontSize: tokens.type.label,
+    fontWeight: "600",
+  },
+  cameraButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: tokens.spacing.sm,
+    height: 52,
+    borderWidth: 2,
+    borderColor: tokens.colors.border,
+    borderStyle: "dashed",
+    borderRadius: tokens.radius.md,
+    backgroundColor: tokens.colors.surface,
+  },
+  cameraButtonIcon: {
+    fontSize: 22,
+  },
+  cameraButtonText: {
+    color: tokens.colors.textSecondary,
+    fontSize: tokens.type.body,
+    fontWeight: "600",
+  },
+  photoPreviewWrap: {
+    gap: tokens.spacing.sm,
+  },
+  photoPreview: {
+    width: "100%",
+    height: 180,
+    borderRadius: tokens.radius.lg,
+    backgroundColor: tokens.colors.surfaceAlt,
+  },
+  photoTakenBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: tokens.radius.pill,
+    backgroundColor: "rgba(34,197,94,0.12)",
+    borderWidth: 1,
+    borderColor: tokens.colors.safe,
+  },
+  photoTakenText: {
+    color: tokens.colors.safe,
+    fontSize: tokens.type.label,
+    fontWeight: "700",
+  },
+  photoActions: {
+    flexDirection: "row",
+    gap: tokens.spacing.sm,
+  },
+  retakeBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: tokens.radius.sm,
+    borderWidth: 1,
+    borderColor: tokens.colors.ctaPrimary,
+  },
+  retakeBtnText: {
+    color: tokens.colors.ctaPrimary,
+    fontSize: tokens.type.label,
+    fontWeight: "600",
+  },
+  removeBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: tokens.radius.sm,
+    borderWidth: 1,
+    borderColor: tokens.colors.danger,
+  },
+  removeBtnText: {
+    color: tokens.colors.danger,
+    fontSize: tokens.type.label,
+    fontWeight: "600",
   },
 });

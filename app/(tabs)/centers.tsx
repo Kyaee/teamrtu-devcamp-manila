@@ -58,8 +58,8 @@ const HOTLINE_SECTIONS: {
 export default function CentersScreen() {
   const { location } = useUserLocation();
   const { centers, openOnly, setOpenOnly } = useCenters(
-    location.latitude,
-    location.longitude,
+    location?.latitude,
+    location?.longitude,
   );
 
   return (

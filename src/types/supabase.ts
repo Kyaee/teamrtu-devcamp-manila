@@ -7,6 +7,7 @@ export type DbFloodReport = {
   status: "pending" | "confirmed";
   reporter_label: string;
   barangay: string | null;
+  photo_url: string | null;
   created_at: string;
 };
 
@@ -18,6 +19,17 @@ export type DbFloodReportRaw = {
   status: "pending" | "confirmed";
   reporter_label: string;
   barangay: string | null;
+  photo_url: string | null;
+  created_at: string;
+};
+
+/** Raw row from drain_reports table (realtime payloads use this). */
+export type DbDrainReportRaw = {
+  id: string;
+  location: string;
+  description: string;
+  photo_url: string | null;
+  status: "pending" | "confirmed";
   created_at: string;
 };
 
@@ -27,6 +39,7 @@ export type DbDrainReport = {
   lat: number;
   lng: number;
   description: string;
+  photo_url: string | null;
   status: "pending" | "confirmed";
   created_at: string;
 };
@@ -89,12 +102,14 @@ export type FloodReportInsert = {
   status?: "pending" | "confirmed";
   reporter_label?: string;
   barangay?: string;
+  photo_url?: string;
 };
 
 export type DrainReportInsert = {
   location: string;
   description: string;
   status?: "pending" | "confirmed";
+  photo_url?: string;
 };
 
 /** Row returned by the `nearby_report_summary` RPC function */

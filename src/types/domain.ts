@@ -23,6 +23,7 @@ export type FloodReport = {
   status: "pending" | "confirmed";
   createdAt: string;
   reporterLabel: string;
+  photoUrl?: string | null;
 };
 
 export type DrainReport = {
@@ -31,6 +32,7 @@ export type DrainReport = {
   lng: number;
   createdAt: string;
   description: string;
+  photoUrl?: string | null;
   status: "pending" | "confirmed";
 };
 

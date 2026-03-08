@@ -147,8 +147,8 @@ export default function HomeScreen() {
   const { isConnected } = useConnectivity();
   const { location } = useUserLocation();
   const { highestSeverityAlert } = useAlerts(
-    location.latitude,
-    location.longitude,
+    location?.latitude,
+    location?.longitude,
   );
   const {
     signal,
@@ -157,8 +157,8 @@ export default function HomeScreen() {
     signalOverride,
     setSignalOverride,
   } = useWeatherSignal(
-    location.latitude,
-    location.longitude,
+    location?.latitude,
+    location?.longitude,
     highestSeverityAlert?.severity,
   );
 
@@ -173,6 +173,9 @@ export default function HomeScreen() {
     location.latitude,
     location.longitude,
     centers,
+  const { centers, loading: centersLoading } = useCenters(
+    location?.latitude,
+    location?.longitude,
   );
   const {
     decision,
@@ -327,6 +330,7 @@ export default function HomeScreen() {
   }, []);
 
   const handleEvaluate = useCallback(() => {
+    if (!location) return;
     void runDecision({
       userLocation: location,
       weather,
@@ -355,6 +359,7 @@ export default function HomeScreen() {
     if (decisionLoading) return;
     if (centersLoading || centers.length === 0) return;
     if (!reportsLoaded) return;
+    if (!location) return;
 
     // Re-evaluate when flood reports arrive or change significantly
     const floodCountChanged =
@@ -407,6 +412,8 @@ export default function HomeScreen() {
     if (fallbackFetchRef.current === key) return;
     fallbackFetchRef.current = key;
 
+    if (!location) return;
+
     const from: LatLng = {
       latitude: location.latitude,
       longitude: location.longitude,
@@ -433,7 +440,7 @@ export default function HomeScreen() {
       }
       setFallbackRoutes(map);
     })();
-  }, [decision, location.latitude, location.longitude]);
+  }, [decision, location?.latitude, location?.longitude]);
 
   // Route colors
   const SAFE_ROUTE_COLORS = ["#000000", "#6B7280", "#9CA3AF"] as const;
@@ -457,6 +464,7 @@ export default function HomeScreen() {
     }
 
     // Last resort: thin straight line while route is still loading
+    if (!location) return null;
     return {
       polyline: [
         { latitude: location.latitude, longitude: location.longitude },
@@ -465,7 +473,7 @@ export default function HomeScreen() {
       color: "#9CA3AF",
       width: 2,
     };
-  }, [navTarget, fallbackRoutes, location.latitude, location.longitude]);
+  }, [navTarget, fallbackRoutes, location?.latitude, location?.longitude]);
 
   // Build secondary route overlays for the other 2 centers
   const secondaryRouteOverlays = useMemo(() => {
@@ -490,12 +498,19 @@ export default function HomeScreen() {
     return overlays;
   }, [decision, navTarget, fallbackRoutes]);
 
-  const initialRegion = {
-    latitude: location.latitude,
-    longitude: location.longitude,
-    latitudeDelta: 0.02,
-    longitudeDelta: 0.02,
-  };
+  const initialRegion = location
+    ? {
+        latitude: location.latitude,
+        longitude: location.longitude,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
+      }
+    : {
+        latitude: 14.6,
+        longitude: 121.0,
+        latitudeDelta: 0.5,
+        longitudeDelta: 0.5,
+      };
 
   const markers: MapMarker[] = useMemo(() => {
     const result: MapMarker[] = [];
@@ -610,8 +625,8 @@ export default function HomeScreen() {
         pointerEvents="box-none"
       >
         <LocationSearchBar
-          userLat={location.latitude}
-          userLng={location.longitude}
+          userLat={location?.latitude}
+          userLng={location?.longitude}
           onSelect={handleSearchSelect}
           statusBadge={
             <View
@@ -850,6 +865,7 @@ export default function HomeScreen() {
               <Pressable
                 style={styles.gpsButton}
                 onPress={() => {
+                  if (!location) return;
                   mapRef.current?.animateToRegion(
                     {
                       latitude: location.latitude,

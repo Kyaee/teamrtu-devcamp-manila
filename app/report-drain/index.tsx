@@ -48,12 +48,14 @@ export default function ReportDrainScreen() {
   }, [openCamera]);
 
   const handleSubmit = useCallback(async () => {
+    if (!location) return;
     const description = selectedLabel + (photoUri ? " (may larawan)" : "");
     await addDrainReport(
       description,
       isConnected,
       location.latitude,
       location.longitude,
+      photoUri,
     );
     setSubmitted(true);
     setTimeout(() => back(), 1200);

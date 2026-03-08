@@ -28,8 +28,8 @@ export default function CenterDetailScreen() {
   const router = useRouter();
   const { location } = useUserLocation();
   const { centers, loading: centersLoading } = useCenters(
-    location.latitude,
-    location.longitude,
+    location?.latitude,
+    location?.longitude,
   );
   const { isConnected } = useConnectivity();
 
