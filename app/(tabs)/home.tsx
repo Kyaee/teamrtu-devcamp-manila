@@ -49,6 +49,7 @@ import { getRouteGuidance } from "@/src/services/maps";
 import type { PlaceLocation } from "@/src/services/places";
 import { useAppSlice } from "@/src/store/app-slice";
 import { useChecklistStore } from "@/src/store/checklist-store";
+import { useReloadApp } from "@/src/store/reload-context";
 import type { FloodReport, ReportDepth } from "@/src/types/domain";
 import type { HourlyForecastEntry } from "@/src/types/weather";
 
@@ -145,6 +146,7 @@ const PANEL_COLLAPSED = 120;
 export default function HomeScreen() {
   const router = useRouter();
   const { isConnected } = useConnectivity();
+  const reloadApp = useReloadApp();
   const { location } = useUserLocation();
   const { highestSeverityAlert } = useAlerts(
     location?.latitude,
@@ -629,13 +631,18 @@ export default function HomeScreen() {
               style={[
                 styles.statusBadge,
                 {
-                  backgroundColor: isConnected
-                    ? tokens.colors.safe
-                    : tokens.colors.ctaPrimary,
+                  backgroundColor: isConnected ? "#000000" : "#FFFFFF",
+                  borderWidth: isConnected ? 0 : 1,
+                  borderColor: isConnected ? undefined : "#000000",
                 },
               ]}
             >
-              <Text style={styles.statusBadgeText}>
+              <Text
+                style={[
+                  styles.statusBadgeText,
+                  { color: isConnected ? "#FFFFFF" : "#000000" },
+                ]}
+              >
                 {isConnected ? "Online" : "Offline"}
               </Text>
             </View>
@@ -1168,7 +1175,9 @@ export default function HomeScreen() {
           {/* DEV: Signal override for testing typhoon mode */}
           {__DEV__ ? (
             <View style={styles.devCard}>
-              <Text style={styles.devTitle}>DEV: Force Signal</Text>
+              <Text style={styles.devTitle}>
+                DEV: Force Signal (reloads app)
+              </Text>
               <View style={styles.devRow}>
                 {(
                   [null, "MONITOR", "PREPARE", "LEAVE", "EVACUATE"] as const
@@ -1185,7 +1194,11 @@ export default function HomeScreen() {
                         active &&
                           s && { backgroundColor: tokens.colors.severity[s] },
                       ]}
-                      onPress={() => setSignalOverride(s)}
+                      onPress={() => {
+                        setSignalOverride(s);
+                        // Small delay so AsyncStorage write finishes before remount
+                        setTimeout(() => reloadApp(), 150);
+                      }}
                     >
                       <Text
                         style={[

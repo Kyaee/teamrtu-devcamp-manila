@@ -9,6 +9,7 @@ import { deriveFloodSignal } from "@/src/services/weather-signal";
 
 const POLL_MS = 15 * 60 * 1000; // 15 minutes
 const CACHE_KEY = "agos:weather-data";
+const OVERRIDE_KEY = "agos:signal-override";
 
 const SEVERITY_RANK: Record<Severity, number> = {
   MONITOR: 0,
@@ -30,6 +31,13 @@ export function useWeatherSignal(
   const [override, setOverride] = useState<Severity | null>(null);
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Restore persisted signal override on mount
+  useEffect(() => {
+    void readJson<Severity | null>(OVERRIDE_KEY, null).then((saved) => {
+      if (saved) setOverride(saved);
+    });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,6 +91,7 @@ export function useWeatherSignal(
 
   const setSignalOverride = useCallback((s: Severity | null) => {
     setOverride(s);
+    void writeJson(OVERRIDE_KEY, s);
   }, []);
 
   return {

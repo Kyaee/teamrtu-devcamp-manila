@@ -8,12 +8,24 @@ import { SplashOverlay } from "@/src/components/splash-overlay";
 import { tokens } from "@/src/design/tokens";
 import { AppSliceProvider } from "@/src/store/app-slice";
 import { ChecklistStoreProvider } from "@/src/store/checklist-store";
+import { ReloadProvider, useReloadContext } from "@/src/store/reload-context";
 
 export const unstable_settings = {
   anchor: "(tabs)",
 };
 
 export default function RootLayout() {
+  return (
+    <ReloadProvider>
+      <AppInner />
+    </ReloadProvider>
+  );
+}
+
+function AppInner() {
+  // Access mountKey from ReloadProvider to key the inner tree
+  const { mountKey } = useReloadContext();
+
   const navigationTheme = {
     ...DefaultTheme,
     colors: {
@@ -27,7 +39,7 @@ export default function RootLayout() {
   };
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1 }} key={mountKey}>
       <AppSliceProvider>
         <ChecklistStoreProvider>
           <ThemeProvider value={navigationTheme}>
