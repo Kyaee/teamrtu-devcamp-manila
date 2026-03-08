@@ -3,7 +3,13 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { tokens } from "@/src/design/tokens";
 
-export type MarkerCategory = "center" | "search" | "flood" | "drain" | "dpwh";
+export type MarkerCategory =
+  | "center"
+  | "search"
+  | "flood"
+  | "drain"
+  | "dpwh"
+  | "urgent_rescue";
 
 export type MapMarker = {
   id: string;

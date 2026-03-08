@@ -166,16 +166,13 @@ export default function HomeScreen() {
     centers,
     loading: centersLoading,
     refresh: refreshCenters,
-  } = useCenters(location.latitude, location.longitude);
+  } = useCenters(location?.latitude, location?.longitude);
   const { floodReports, drainReports, reportsLoaded, addFloodReport } =
     useMapReports();
   const { choice: geminiChoice, loading: geminiLoading } = useGeminiCenter(
-    location.latitude,
-    location.longitude,
-    centers,
-  const { centers, loading: centersLoading } = useCenters(
     location?.latitude,
     location?.longitude,
+    centers,
   );
   const {
     decision,

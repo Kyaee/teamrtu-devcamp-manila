@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { EvacCenter } from "@/src/types/domain";
 
@@ -70,6 +70,9 @@ export function useCenters(userLat?: number, userLng?: number) {
   const [openOnly, setOpenOnly] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   useEffect(() => {
     if (userLat === undefined || userLng === undefined) return;
@@ -131,7 +134,7 @@ export function useCenters(userLat?: number, userLng?: number) {
     return () => {
       cancelled = true;
     };
-  }, [lat, lng, userLat, userLng, refreshKey]);
+  }, [userLat, userLng, refreshKey]);
 
   const centers = useMemo<EvacCenter[]>(() => {
     if (!openOnly) return allCenters;
