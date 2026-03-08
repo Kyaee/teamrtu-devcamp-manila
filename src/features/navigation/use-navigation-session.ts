@@ -232,7 +232,7 @@ export function useNavigationSession(
           destination,
           fc.floodReports,
           fc.signal,
-          "Kasalukuyang lokasyon",
+          "Current location",
           destinationLabel,
         );
         newRoute = result.route;
@@ -241,7 +241,7 @@ export function useNavigationSession(
 
         if (flooded) {
           speak(
-            "Babala: ang ruta ay dumadaan sa may baha. Mag-ingat.",
+            "Warning: route passes through a flooded area. Stay alert.",
             "warning",
           );
         }
@@ -249,7 +249,7 @@ export function useNavigationSession(
         newRoute = await getRouteGuidance(
           from,
           destination,
-          "Kasalukuyang lokasyon",
+          "Current location",
           destinationLabel,
         );
       }
@@ -343,7 +343,7 @@ export function useNavigationSession(
             destination,
             fc.floodReports,
             fc.signal,
-            "Kasalukuyang lokasyon",
+            "Current location",
             destinationLabel,
           );
           route = result.route;
@@ -352,7 +352,7 @@ export function useNavigationSession(
 
           if (flooded) {
             speak(
-              "Babala: ang ruta ay dumadaan sa may baha. Mag-ingat.",
+              "Warning: route passes through a flooded area. Stay alert.",
               "warning",
             );
           }
@@ -366,7 +366,7 @@ export function useNavigationSession(
           route = await getRouteGuidance(
             from,
             destination,
-            "Kasalukuyang lokasyon",
+            "Current location",
             destinationLabel,
           );
         } catch {
@@ -401,7 +401,7 @@ export function useNavigationSession(
       setState((prev) => ({
         ...prev,
         status: "error",
-        errorMessage: "Hindi makapagsimula ng navigation.",
+        errorMessage: "Unable to start navigation.",
       }));
     }
   }, [destination, destinationLabel, speak, announceStep, startLocationWatch]);

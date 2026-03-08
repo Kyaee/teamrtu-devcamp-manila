@@ -56,13 +56,6 @@ export default function CentersScreen() {
           </Link>
         </View>
       ))}
-
-      <View style={styles.card}>
-        <Text style={styles.title}>Important MVP guardrail</Text>
-        <Text style={styles.body}>
-          Center capacity is not shown as a definitive live metric.
-        </Text>
-      </View>
     </Screen>
   );
 }

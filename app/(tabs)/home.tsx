@@ -38,18 +38,18 @@ import {
 import { useFloodStreetHighlights } from "@/src/features/map/use-flood-street-highlights";
 import { useMapReports } from "@/src/features/map/use-map-reports";
 import {
-  useUrgentMarkers,
   getUrgentPinColor,
+  useUrgentMarkers,
 } from "@/src/features/map/use-urgent-markers";
 import { useUserLocation } from "@/src/features/map/use-user-location";
 import { useConnectivity } from "@/src/features/offline/use-connectivity";
+import { usePreparedness } from "@/src/features/preparedness/use-preparedness";
 import type { LatLng, RouteResult } from "@/src/services/maps";
 import { getRouteGuidance } from "@/src/services/maps";
 import type { PlaceLocation } from "@/src/services/places";
-import type { FloodReport, ReportDepth } from "@/src/types/domain";
-import { useChecklistStore } from "@/src/store/checklist-store";
-import { usePreparedness } from "@/src/features/preparedness/use-preparedness";
 import { useAppSlice } from "@/src/store/app-slice";
+import { useChecklistStore } from "@/src/store/checklist-store";
+import type { FloodReport, ReportDepth } from "@/src/types/domain";
 import type { HourlyForecastEntry } from "@/src/types/weather";
 
 const DEPTH_COLORS: Record<ReportDepth, string> = {
@@ -351,8 +351,8 @@ export default function HomeScreen() {
 
   const prevFloodCountRef = useRef(0);
 
+  // Auto-evaluate evacuation assessment once centers load (any signal level)
   useEffect(() => {
-    if (!isTyphoon) return;
     if (decisionLoading) return;
     if (centersLoading || centers.length === 0) return;
     if (!reportsLoaded) return;
@@ -373,7 +373,6 @@ export default function HomeScreen() {
       centers,
     });
   }, [
-    isTyphoon,
     decisionLoading,
     decision,
     centersLoading,
@@ -427,7 +426,7 @@ export default function HomeScreen() {
           const route = await getRouteGuidance(
             from,
             to,
-            "Kasalukuyang lokasyon",
+            "Current location",
             ev.center.name,
           );
           map[ev.center.id] = route;
@@ -935,21 +934,21 @@ export default function HomeScreen() {
           >
             <Text style={styles.helpButtonIcon}>{"\u26A0"}</Text>
             <View style={styles.helpButtonContent}>
-              <Text style={styles.helpButtonTitle}>Humingi ng Tulong</Text>
+              <Text style={styles.helpButtonTitle}>Request Help</Text>
               <Text style={styles.helpButtonSub}>
-                AI assessment ng sitwasyon mo
+                AI assessment of your situation
               </Text>
             </View>
             <Text style={styles.helpButtonArrow}>{"\u203A"}</Text>
           </Pressable>
 
-          {/* Panahon card */}
+          {/* Weather card */}
           <View
             style={[styles.card, { borderWidth: 1, borderColor: signalColor }]}
           >
             <View style={styles.weatherHeader}>
               <View style={styles.weatherHeaderLeft}>
-                <Text style={styles.cardTitle}>Panahon</Text>
+                <Text style={styles.cardTitle}>Weather</Text>
                 {current ? (
                   <>
                     <Text style={styles.weatherTemp}>
@@ -984,18 +983,18 @@ export default function HomeScreen() {
               <View style={styles.forecastList}>
                 <View style={styles.forecastRow}>
                   <Text style={[styles.forecastHour, styles.forecastHeader]}>
-                    Oras
+                    Hour
                   </Text>
                   <Text
                     style={[styles.forecastCondition, styles.forecastHeader]}
                   >
-                    Lagay
+                    Condition
                   </Text>
                   <Text style={[styles.forecastRain, styles.forecastHeader]}>
                     Prob
                   </Text>
                   <Text style={[styles.forecastQpf, styles.forecastHeader]}>
-                    Ulan
+                    Rain
                   </Text>
                 </View>
                 {forecastHours.map((h, i) => (
@@ -1108,8 +1107,8 @@ export default function HomeScreen() {
                             }}
                           >
                             {allFlooded
-                              ? "\u26A0 Lahat ng ruta ay dumadaan sa baha \u2014 pinakamalapit na center ang gagamitin. Mag-ingat!"
-                              : "\u26A0 May ruta na dumadaan sa baha \u2014 nag-reroute sa clear na center"}
+                              ? "\u26A0 All routes pass through flooded areas \u2014 using the nearest center. Stay alert!"
+                              : "\u26A0 Some routes are flooded \u2014 rerouted to a clear center"}
                           </Text>
                         </View>
                       );

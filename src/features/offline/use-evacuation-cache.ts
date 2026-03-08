@@ -11,11 +11,11 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { buildEvacuationDecision } from "@/src/features/decision-engine/engine";
-import type { DecisionOutcome } from "@/src/features/decision-engine/types";
 import { useAlerts } from "@/src/features/alerts/use-alerts";
 import { useWeatherSignal } from "@/src/features/alerts/use-weather-signal";
 import { useCenters } from "@/src/features/centers/use-centers";
+import { buildEvacuationDecision } from "@/src/features/decision-engine/engine";
+import type { DecisionOutcome } from "@/src/features/decision-engine/types";
 import { useMapReports } from "@/src/features/map/use-map-reports";
 import { useUserLocation } from "@/src/features/map/use-user-location";
 import { useConnectivity } from "@/src/features/offline/use-connectivity";
@@ -121,7 +121,7 @@ export function useEvacuationCache() {
             primaryRoute = await getRouteGuidance(
               loc,
               { latitude: primary.center.lat, longitude: primary.center.lng },
-              "Kasalukuyang lokasyon",
+              "Current location",
               primary.center.name,
             );
           } catch {

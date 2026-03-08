@@ -30,28 +30,28 @@ const DEPTH_OPTIONS: {
   {
     id: "ankle",
     label: "Ankle",
-    tagalog: "Bukung-bukong",
+    tagalog: "Ankle-deep",
     icon: "💧",
     color: tokens.colors.severity.MONITOR,
   },
   {
     id: "knee",
     label: "Knee",
-    tagalog: "Tuhod",
+    tagalog: "Knee-deep",
     icon: "🌊",
     color: tokens.colors.severity.PREPARE,
   },
   {
     id: "waist",
     label: "Waist",
-    tagalog: "Baywang",
+    tagalog: "Waist-deep",
     icon: "🌊",
     color: tokens.colors.severity.LEAVE,
   },
   {
     id: "chest",
     label: "Above Waist",
-    tagalog: "Dibdib pataas",
+    tagalog: "Chest or higher",
     icon: "🚨",
     color: tokens.colors.severity.EVACUATE,
   },
@@ -215,7 +215,7 @@ export default function ReportScreen() {
         </View>
 
         <Text style={styles.headerSub}>
-          Mag-report ng baha o baradong kanal sa iyong lokasyon.
+          Report flooding or clogged drains at your location.
         </Text>
 
         {/* Tab selector */}
@@ -227,7 +227,7 @@ export default function ReportScreen() {
             <Text
               style={[styles.tabText, tab === "flood" && styles.tabTextActive]}
             >
-              Baha
+              Flood
             </Text>
           </Pressable>
           <Pressable
@@ -237,7 +237,7 @@ export default function ReportScreen() {
             <Text
               style={[styles.tabText, tab === "drain" && styles.tabTextActive]}
             >
-              Baradong Kanal
+              Clogged Drain
             </Text>
           </Pressable>
         </View>
@@ -245,9 +245,9 @@ export default function ReportScreen() {
         {/* Flood tab */}
         {tab === "flood" ? (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Gaano kalalim ang baha?</Text>
+            <Text style={styles.sectionTitle}>How deep is the flood?</Text>
             <Text style={styles.sectionHint}>
-              Pindutin ang level na katumbas ng baha sa iyong lokasyon.
+              Tap the level that matches the flooding at your location.
             </Text>
 
             <View style={styles.depthGrid}>
@@ -275,7 +275,7 @@ export default function ReportScreen() {
 
             {/* Camera photo section */}
             <View style={styles.photoSection}>
-              <Text style={styles.photoLabel}>📷 Magdagdag ng larawan</Text>
+              <Text style={styles.photoLabel}>📷 Add a photo</Text>
               {floodPhotoUri ? (
                 <View style={styles.photoPreviewWrap}>
                   <Image
@@ -291,13 +291,13 @@ export default function ReportScreen() {
                       style={styles.retakeBtn}
                       onPress={() => openCamera("flood")}
                     >
-                      <Text style={styles.retakeBtnText}>Kunan ulit</Text>
+                      <Text style={styles.retakeBtnText}>Retake</Text>
                     </Pressable>
                     <Pressable
                       style={styles.removeBtn}
                       onPress={() => setFloodPhotoUri(null)}
                     >
-                      <Text style={styles.removeBtnText}>Alisin</Text>
+                      <Text style={styles.removeBtnText}>Remove</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -307,7 +307,7 @@ export default function ReportScreen() {
                   onPress={() => openCamera("flood")}
                 >
                   <Text style={styles.cameraButtonIcon}>📸</Text>
-                  <Text style={styles.cameraButtonText}>Kunan ng larawan</Text>
+                  <Text style={styles.cameraButtonText}>Take photo</Text>
                 </Pressable>
               )}
             </View>
@@ -318,7 +318,7 @@ export default function ReportScreen() {
             {recentFloods.length > 0 ? (
               <View style={styles.recentSection}>
                 <Text style={styles.recentTitle}>
-                  Kamakailan ({floodReports.length} total)
+                  Recent ({floodReports.length} total)
                 </Text>
                 {recentFloods.map((r) => {
                   const opt = DEPTH_OPTIONS.find((d) => d.id === r.depth);
@@ -353,10 +353,10 @@ export default function ReportScreen() {
         ) : (
           /* Drain tab */
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>I-report ang baradong kanal</Text>
+            <Text style={styles.sectionTitle}>Report a clogged drain</Text>
             <Text style={styles.sectionHint}>
-              Kahit walang bagyo, pwede kang mag-report ng baradong kanal o
-              basura na pwedeng magdulot ng pagbaha.
+              Even without a storm, you can report clogged drains or debris that
+              could cause flooding.
             </Text>
 
             <TextInput
@@ -364,14 +364,14 @@ export default function ReportScreen() {
               onChangeText={setDrainText}
               multiline
               style={styles.textInput}
-              placeholder="Halimbawa: May baradong kanal sa kanto ng Rizal St. puno ng basura."
+              placeholder="Example: Clogged drain at the corner of Rizal St., full of garbage."
               placeholderTextColor={tokens.colors.textDisabled}
               editable={!submitting}
             />
 
             {/* Camera photo section */}
             <View style={styles.photoSection}>
-              <Text style={styles.photoLabel}>📷 Magdagdag ng larawan</Text>
+              <Text style={styles.photoLabel}>📷 Add a photo</Text>
               {drainPhotoUri ? (
                 <View style={styles.photoPreviewWrap}>
                   <Image
@@ -387,13 +387,13 @@ export default function ReportScreen() {
                       style={styles.retakeBtn}
                       onPress={() => openCamera("drain")}
                     >
-                      <Text style={styles.retakeBtnText}>Kunan ulit</Text>
+                      <Text style={styles.retakeBtnText}>Retake</Text>
                     </Pressable>
                     <Pressable
                       style={styles.removeBtn}
                       onPress={() => setDrainPhotoUri(null)}
                     >
-                      <Text style={styles.removeBtnText}>Alisin</Text>
+                      <Text style={styles.removeBtnText}>Remove</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -403,7 +403,7 @@ export default function ReportScreen() {
                   onPress={() => openCamera("drain")}
                 >
                   <Text style={styles.cameraButtonIcon}>📸</Text>
-                  <Text style={styles.cameraButtonText}>Kunan ng larawan</Text>
+                  <Text style={styles.cameraButtonText}>Take photo</Text>
                 </Pressable>
               )}
             </View>
@@ -420,7 +420,7 @@ export default function ReportScreen() {
               {submitting ? (
                 <ActivityIndicator color={tokens.colors.ctaText} size="small" />
               ) : (
-                <Text style={styles.submitText}>I-submit ang report</Text>
+                <Text style={styles.submitText}>Submit report</Text>
               )}
             </Pressable>
 
@@ -428,7 +428,7 @@ export default function ReportScreen() {
             {recentDrains.length > 0 ? (
               <View style={styles.recentSection}>
                 <Text style={styles.recentTitle}>
-                  Kamakailan ({drainReports.length} total)
+                  Recent ({drainReports.length} total)
                 </Text>
                 {recentDrains.map((d) => (
                   <View key={d.id} style={styles.recentRow}>
@@ -477,7 +477,7 @@ export default function ReportScreen() {
                   Pending offline report{queueCount > 1 ? "s" : ""}
                 </Text>
                 <Text style={styles.queueHint}>
-                  {isConnected ? "Tap para i-sync" : "Mag-sync kapag online na"}
+                  {isConnected ? "Tap to sync" : "Will sync when online"}
                 </Text>
               </View>
             </View>
@@ -493,7 +493,7 @@ export default function ReportScreen() {
               : "Fetching..."}
           </Text>
           <Text style={styles.gpsHint}>
-            Ang iyong kasalukuyang lokasyon ang gagamitin sa report.
+            Your current location will be used for the report.
           </Text>
         </View>
       </ScrollView>

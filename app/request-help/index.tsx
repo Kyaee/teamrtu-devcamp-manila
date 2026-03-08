@@ -16,6 +16,7 @@ import {
   View,
 } from "react-native";
 import Animated, {
+  cancelAnimation,
   Easing,
   FadeIn,
   FadeOut,
@@ -25,7 +26,6 @@ import Animated, {
   withRepeat,
   withSequence,
   withTiming,
-  cancelAnimation,
 } from "react-native-reanimated";
 import {
   SafeAreaView,
@@ -33,20 +33,20 @@ import {
 } from "react-native-safe-area-context";
 
 import { tokens } from "@/src/design/tokens";
+import { useCenters } from "@/src/features/centers/use-centers";
 import type { ConversationMessage } from "@/src/features/help/use-help-assessment";
 import { useHelpAssessment } from "@/src/features/help/use-help-assessment";
 import { useLiveVoice } from "@/src/features/help/use-live-voice";
-import type { TurnState } from "@/src/services/gemini-live";
 import {
-  useUrgentMarkers,
   URGENT_PURPLE_PIN,
+  useUrgentMarkers,
 } from "@/src/features/map/use-urgent-markers";
 import { useUserLocation } from "@/src/features/map/use-user-location";
 import { useConnectivity } from "@/src/features/offline/use-connectivity";
-import { useCenters } from "@/src/features/centers/use-centers";
+import type { TurnState } from "@/src/services/gemini-live";
 import { useAppSlice } from "@/src/store/app-slice";
-import { useChecklistStore } from "@/src/store/checklist-store";
 import type { ChecklistEntry } from "@/src/store/checklist-store";
+import { useChecklistStore } from "@/src/store/checklist-store";
 import type { HelpAssessment } from "@/src/types/ai";
 import type { EvacCenter } from "@/src/types/domain";
 
@@ -62,26 +62,26 @@ const URGENCY_COLORS: Record<string, string> = {
 };
 
 const URGENCY_LABELS: Record<string, string> = {
-  low: "Mababang Panganib",
-  medium: "Katamtamang Panganib",
-  high: "Mataas na Panganib",
-  very_urgent: "SOBRANG URGENT",
+  low: "Low Risk",
+  medium: "Moderate Risk",
+  high: "High Risk",
+  very_urgent: "VERY URGENT",
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
-  documents: "Dokumento",
-  food_water: "Pagkain at Tubig",
-  clothing: "Damit",
-  medical: "Gamot / Medical",
+  documents: "Documents",
+  food_water: "Food & Water",
+  clothing: "Clothing",
+  medical: "Medical",
   electronics: "Electronics",
-  tools: "Kagamitan",
-  other: "Iba pa",
+  tools: "Tools",
+  other: "Other",
 };
 
 const TURN_STATE_LABELS: Record<TurnState, string> = {
-  listening: "Nakikinig...",
-  speaking: "Sumasagot ang AI...",
-  idle: "Handa na",
+  listening: "Listening...",
+  speaking: "AI is responding...",
+  idle: "Ready",
 };
 
 const TURN_STATE_COLORS: Record<TurnState, string> = {
@@ -238,7 +238,7 @@ function AssessmentCard({
       <Text style={styles.assessmentSummary}>{assessment.summary}</Text>
 
       <View style={styles.sectionDivider} />
-      <Text style={styles.sectionTitle}>Inirerekomendang Aksyon</Text>
+      <Text style={styles.sectionTitle}>Recommended Actions</Text>
       {assessment.recommendedActions.map((action, i) => (
         <View key={i} style={styles.actionRow}>
           <Text style={styles.actionBullet}>{i + 1}.</Text>
@@ -249,7 +249,7 @@ function AssessmentCard({
       {grouped.size > 0 && (
         <>
           <View style={styles.sectionDivider} />
-          <Text style={styles.sectionTitle}>Checklist ng mga Dadalhin</Text>
+          <Text style={styles.sectionTitle}>Things to Bring Checklist</Text>
           {Array.from(grouped.entries()).map(([category, items]) => (
             <View key={category} style={styles.checklistGroup}>
               <Text style={styles.checklistCategory}>
@@ -330,9 +330,7 @@ function NearbyCentersCard({
       <View style={styles.centersCard}>
         <View style={styles.centersHeaderRow}>
           <Ionicons name="location" size={16} color={tokens.colors.danger} />
-          <Text style={styles.sectionTitle}>
-            Mga Malapit na Evacuation Center
-          </Text>
+          <Text style={styles.sectionTitle}>Nearby Evacuation Centers</Text>
         </View>
         <ActivityIndicator color={tokens.colors.danger} />
       </View>
@@ -347,9 +345,7 @@ function NearbyCentersCard({
     <Animated.View entering={FadeIn.duration(300)} style={styles.centersCard}>
       <View style={styles.centersHeaderRow}>
         <Ionicons name="location" size={16} color={tokens.colors.danger} />
-        <Text style={styles.sectionTitle}>
-          Mga Malapit na Evacuation Center
-        </Text>
+        <Text style={styles.sectionTitle}>Nearby Evacuation Centers</Text>
       </View>
       {top5.map((center) => (
         <Pressable
@@ -532,11 +528,11 @@ function VoiceModePanel({
         />
         <Text style={styles.voiceStatusText}>
           {voiceState === "connecting"
-            ? "Kumokonekta sa AI..."
+            ? "Connecting to AI..."
             : voiceState === "active"
               ? TURN_STATE_LABELS[turnState]
               : voiceState === "error"
-                ? "May error"
+                ? "Error"
                 : "Voice Mode"}
         </Text>
       </View>
@@ -576,14 +572,14 @@ function VoiceModePanel({
       {/* Instructions */}
       <Text style={styles.voiceInstructionText}>
         {voiceState === "connecting"
-          ? "Sandali lang, kumokonekta..."
+          ? "Please wait, connecting..."
           : voiceState === "active" && turnState === "listening"
-            ? "Magsalita ka ngayon — nakikinig ang AI"
+            ? "Speak now — the AI is listening"
             : voiceState === "active" && turnState === "speaking"
-              ? "Sumasagot ang AI — makinig ka muna"
+              ? "AI is responding — please listen"
               : voiceState === "error"
-                ? (voiceError ?? "Hindi maka-connect. I-try ang text mode.")
-                : "Kumokonekta..."}
+                ? (voiceError ?? "Could not connect. Try text mode.")
+                : "Connecting..."}
       </Text>
 
       {voiceError && voiceState === "error" && (
@@ -596,7 +592,7 @@ function VoiceModePanel({
       <View style={styles.voiceActionsRow}>
         <Pressable style={styles.voiceStopButton} onPress={onStop}>
           <Ionicons name="stop-circle" size={20} color="#FFFFFF" />
-          <Text style={styles.voiceStopText}>Itigil</Text>
+          <Text style={styles.voiceStopText}>Stop</Text>
         </Pressable>
 
         {/* Chat fallback button — always available */}
@@ -874,8 +870,8 @@ export default function RequestHelpScreen() {
           <View style={styles.offlineBanner}>
             <Ionicons name="cloud-offline" size={14} color="#FFFFFF" />
             <Text style={styles.offlineBannerText}>
-              Offline — ang AI assessment ay maaaring hindi gumana. Ang urgent
-              marker ay ise-send kapag may internet.
+              Offline — AI assessment may not work. Urgent markers will be sent
+              when internet is available.
             </Text>
           </View>
         )}
@@ -973,7 +969,7 @@ export default function RequestHelpScreen() {
                       >
                         <ActivityIndicator color={tokens.colors.danger} />
                         <Text style={styles.assessingText}>
-                          Ina-assess ang sitwasyon mo...
+                          Assessing your situation...
                         </Text>
                       </Animated.View>
                     )}

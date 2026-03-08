@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 
+import { SplashOverlay } from "@/src/components/splash-overlay";
 import { tokens } from "@/src/design/tokens";
 import { AppSliceProvider } from "@/src/store/app-slice";
 import { ChecklistStoreProvider } from "@/src/store/checklist-store";
@@ -60,7 +61,7 @@ export default function RootLayout() {
               <Stack.Screen
                 name="report-drain/index"
                 options={{
-                  title: "Report: Baradong Kanal",
+                  title: "Report: Clogged Drain",
                   presentation: "modal",
                 }}
               />
@@ -71,8 +72,16 @@ export default function RootLayout() {
                   animation: "slide_from_bottom",
                 }}
               />
+              <Stack.Screen
+                name="navigate/index"
+                options={{
+                  headerShown: false,
+                  animation: "slide_from_right",
+                }}
+              />
             </Stack>
             <StatusBar style="dark" />
+            <SplashOverlay />
           </ThemeProvider>
         </ChecklistStoreProvider>
       </AppSliceProvider>

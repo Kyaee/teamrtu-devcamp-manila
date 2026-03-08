@@ -79,7 +79,7 @@ export default function CenterDetailScreen() {
         resolvedRoute = await getRouteGuidance(
           location,
           { latitude: center.lat, longitude: center.lng },
-          "Kasalukuyang lokasyon",
+          "Current location",
           center.name,
         );
         setRoute(resolvedRoute);
@@ -90,7 +90,7 @@ export default function CenterDetailScreen() {
           setRoute(cached);
           setIsCached(true);
         } else {
-          setRouteError("Hindi makuha ang ruta. Subukan muli.");
+          setRouteError("Could not get route. Please try again.");
         }
       }
     } else {
@@ -100,7 +100,7 @@ export default function CenterDetailScreen() {
         setRoute(cached);
         setIsCached(true);
       } else {
-        setRouteError("Offline — walang naka-cache na ruta.");
+        setRouteError("Offline — no cached route available.");
       }
     }
 
@@ -125,15 +125,15 @@ export default function CenterDetailScreen() {
           <ActivityIndicator size="large" color={tokens.colors.ctaPrimary} />
           <Text style={styles.body}>
             {centersLoading
-              ? "Hinahanap ang mga sentro\u2026"
-              : "Hindi nahanap ang sentro. Bumalik at pumili ulit."}
+              ? "Finding evacuation centers\u2026"
+              : "Center not found. Go back and try again."}
           </Text>
           {!centersLoading && (
             <Pressable
               style={styles.secondaryButton}
               onPress={() => router.back()}
             >
-              <Text style={styles.secondaryButtonText}>Bumalik</Text>
+              <Text style={styles.secondaryButtonText}>Go Back</Text>
             </Pressable>
           )}
         </View>
@@ -150,7 +150,7 @@ export default function CenterDetailScreen() {
           <Text style={styles.body}>{center.address}</Text>
         ) : null}
         <Text style={styles.body}>
-          {center.barangay} · {center.distanceKm.toFixed(1)} km mula sa iyo
+          {center.barangay} · {center.distanceKm.toFixed(1)} km away
         </Text>
         <Text style={styles.sub}>{center.uncertaintyNote}</Text>
         <Text style={styles.guardrail}>
@@ -171,20 +171,18 @@ export default function CenterDetailScreen() {
         {aiLoading ? (
           <View style={styles.aiLoadingRow}>
             <ActivityIndicator size="small" color={tokens.colors.ctaPrimary} />
-            <Text style={styles.aiLoadingText}>
-              Kinukuha ang AI guidance\u2026
-            </Text>
+            <Text style={styles.aiLoadingText}>Loading AI guidance\u2026</Text>
           </View>
         ) : aiGuidance ? (
           <View style={styles.aiContent}>
             <Text style={styles.aiSummary}>{aiGuidance.summary}</Text>
             <View style={styles.aiSection}>
-              <Text style={styles.aiSectionLabel}>Ihanda:</Text>
+              <Text style={styles.aiSectionLabel}>Prepare:</Text>
               <Text style={styles.aiSectionText}>{aiGuidance.preparation}</Text>
             </View>
             {aiGuidance.routeCaution ? (
               <View style={[styles.aiSection, styles.aiCautionSection]}>
-                <Text style={styles.aiSectionLabel}>Paalala sa Ruta:</Text>
+                <Text style={styles.aiSectionLabel}>Route Caution:</Text>
                 <Text style={styles.aiSectionText}>
                   {aiGuidance.routeCaution}
                 </Text>
@@ -202,9 +200,7 @@ export default function CenterDetailScreen() {
         {routeLoading ? (
           <ActivityIndicator color={tokens.colors.ctaText} />
         ) : (
-          <Text style={styles.primaryButtonText}>
-            Tingnan ang Ruta (Walking)
-          </Text>
+          <Text style={styles.primaryButtonText}>View Route (Walking)</Text>
         )}
       </Pressable>
 

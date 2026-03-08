@@ -126,7 +126,7 @@ export default function NavigateScreen() {
         longitude: nav.currentPosition.longitude,
         pinColor: "#000000",
         opacity: 1,
-        title: "Ikaw",
+        title: "You",
         description: "Current location",
       });
     }
@@ -223,16 +223,14 @@ export default function NavigateScreen() {
 
         {nav.isOffRoute ? (
           <View style={styles.offRouteBanner}>
-            <Text style={styles.offRouteText}>
-              Lumihis sa ruta — nagre-reroute...
-            </Text>
+            <Text style={styles.offRouteText}>Off route — rerouting...</Text>
           </View>
         ) : null}
 
         {nav.isFlooded && !nav.isOffRoute ? (
           <View style={styles.floodedRouteBanner}>
             <Text style={styles.floodedRouteText}>
-              ⚠ FLOODED — Ruta dumadaan sa baha. Mag-ingat!
+              ⚠ FLOODED — Route passes through flooded area. Stay alert!
             </Text>
           </View>
         ) : null}
@@ -279,7 +277,7 @@ export default function NavigateScreen() {
 
         {nav.status === "arrived" ? (
           <View style={styles.arrivedBox}>
-            <Text style={styles.arrivedTitle}>Nakarating ka na!</Text>
+            <Text style={styles.arrivedTitle}>You have arrived!</Text>
             <Text style={styles.arrivedBody}>
               {targetCenter.name} — {targetCenter.address}
             </Text>

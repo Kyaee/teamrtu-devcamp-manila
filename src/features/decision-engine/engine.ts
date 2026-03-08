@@ -147,7 +147,7 @@ export async function buildEvacuationDecision(
       const route = await getRouteGuidance(
         userLocation,
         { latitude: pick.center.lat, longitude: pick.center.lng },
-        "Kasalukuyang lokasyon",
+        "Current location",
         pick.center.name,
       );
 
@@ -161,11 +161,16 @@ export async function buildEvacuationDecision(
 
       pick.reasons.unshift(routeReason);
 
+      // Mark flooded when ANY hazard points are detected along the route,
+      // regardless of typhoon mode. This drives the red route color in the UI.
+      if (routeBlock.hazardPoints > 0) {
+        pick.flooded = true;
+      }
+
       if (routeBlock.blocked) {
         pick.reasons.unshift(
           `⚠ FLOODED: ${routeBlock.reason.replace("Route BLOCKED: ", "")}`,
         );
-        pick.flooded = true;
       }
 
       // Update composite score with real route data
@@ -205,10 +210,10 @@ export async function buildEvacuationDecision(
   const bestRoute = bestPick?.route;
   const routeReason = bestRoute
     ? allFlooded
-      ? `Lahat ng ruta ay dumadaan sa baha. Pinakamalapit: ${bestRoute.distanceText}, ${bestRoute.durationText}`
+      ? `All routes pass through flooded areas. Nearest: ${bestRoute.distanceText}, ${bestRoute.durationText}`
       : `Best route: ${bestRoute.distanceText}, ${bestRoute.durationText}`
     : recommended.length === 0
-      ? "Lahat ng ruta ay naka-block dahil sa baha. Hintayin ang update."
+      ? "All routes are blocked due to flooding. Wait for updates."
       : "Route will be fetched when navigation starts";
 
   return {
@@ -222,7 +227,7 @@ export async function buildEvacuationDecision(
     },
     disclaimerText:
       recommended.length === 0 && typhoonActive
-        ? "WARNING: Lahat ng ruta ay may confirmed flood reports. Manatili sa ligtas na lugar habang hinihintay ang bagong assessment."
-        : "Ito ay rekomendasyon lamang. Palaging i-verify ang kondisyon sa lugar. Hindi guaranteed safe ang anumang ruta.",
+        ? "WARNING: All routes have confirmed flood reports. Stay in a safe place while waiting for a new assessment."
+        : "This is a recommendation only. Always verify conditions on site. No route is guaranteed safe.",
   };
 }

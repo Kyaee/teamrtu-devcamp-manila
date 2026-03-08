@@ -28,7 +28,7 @@ export function useEvacuationDecision() {
       const result = await buildEvacuationDecision(input);
       setDecision(result);
     } catch {
-      setError("Hindi makumpleto ang evaluation. Subukan muli.");
+      setError("Could not complete evaluation. Please try again.");
     } finally {
       setLoading(false);
     }

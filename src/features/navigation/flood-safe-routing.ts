@@ -36,7 +36,7 @@ export async function getFloodSafeRoute(
   to: LatLng,
   floodReports: FloodReport[],
   signal: Severity,
-  fromLabel = "Kasalukuyang lokasyon",
+  fromLabel = "Current location",
   toLabel = "Evacuation center",
 ): Promise<FloodSafeResult> {
   const typhoonActive = isTyphoonMode(signal);
@@ -53,12 +53,12 @@ export async function getFloodSafeRoute(
     }
   }
 
-  // No flood data or calm weather — route is fine
-  if (!typhoonActive || floodReports.length === 0) {
+  // No flood data — route is fine
+  if (floodReports.length === 0) {
     return { route, flooded: false, warning: null };
   }
 
-  // Evaluate route against flood pins
+  // Evaluate route against flood pins (always check, regardless of typhoon mode)
   const block = evaluateRouteBlock(route, floodReports, typhoonActive);
 
   if (block.blocked) {
@@ -66,14 +66,18 @@ export async function getFloodSafeRoute(
       route,
       flooded: true,
       warning:
-        "BABALA: Ang ruta ay dumadaan sa may baha. Mag-ingat at i-verify ang kondisyon sa lugar.",
+        "WARNING: Route passes through flooded area. Stay alert and verify conditions on site.",
     };
   }
 
-  const warning =
-    block.hazardPoints > 0
-      ? `Route may pass near flooded areas. ${block.hazardPoints} points near high water.`
-      : null;
+  // Mark flooded when ANY hazard points detected along the route
+  if (block.hazardPoints > 0) {
+    return {
+      route,
+      flooded: true,
+      warning: `Route may pass near flooded areas. ${block.hazardPoints} points near high water.`,
+    };
+  }
 
-  return { route, flooded: false, warning };
+  return { route, flooded: false, warning: null };
 }

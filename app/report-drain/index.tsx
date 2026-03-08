@@ -11,11 +11,11 @@ import { useUserLocation } from "@/src/features/map/use-user-location";
 import { useConnectivity } from "@/src/features/offline/use-connectivity";
 
 const DRAIN_LABELS = [
-  "Baradong kanal",
-  "Basura sa kanal",
-  "Basura sa kalsada",
-  "Baha dahil sa kanal",
-  "Iba pa",
+  "Clogged drain",
+  "Garbage in drain",
+  "Garbage on road",
+  "Flooding from drain",
+  "Other",
 ] as const;
 
 export default function ReportDrainScreen() {
@@ -49,7 +49,7 @@ export default function ReportDrainScreen() {
 
   const handleSubmit = useCallback(async () => {
     if (!location) return;
-    const description = selectedLabel + (photoUri ? " (may larawan)" : "");
+    const description = selectedLabel + (photoUri ? " (with photo)" : "");
     await addDrainReport(
       description,
       isConnected,
@@ -66,7 +66,7 @@ export default function ReportDrainScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.successWrap}>
           <Text style={styles.successIcon}>{"\u2713"}</Text>
-          <Text style={styles.successText}>Na-submit ang report!</Text>
+          <Text style={styles.successText}>Report submitted!</Text>
         </View>
       </SafeAreaView>
     );
@@ -76,9 +76,9 @@ export default function ReportDrainScreen() {
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
       <View style={styles.header}>
         <Pressable onPress={back} style={styles.backButton}>
-          <Text style={styles.backText}>{"\u2190"} Bumalik</Text>
+          <Text style={styles.backText}>{"\u2190"} Back</Text>
         </Pressable>
-        <Text style={styles.title}>Report: Baradong Kanal</Text>
+        <Text style={styles.title}>Report: Clogged Drain</Text>
       </View>
 
       {/* Photo preview / retake */}
@@ -91,19 +91,19 @@ export default function ReportDrainScreen() {
           />
         ) : (
           <View style={styles.photoPlaceholder}>
-            <Text style={styles.photoPlaceholderText}>Walang larawan</Text>
+            <Text style={styles.photoPlaceholderText}>No photo</Text>
           </View>
         )}
         <Pressable style={styles.retakeButton} onPress={openCamera}>
           <Text style={styles.retakeText}>
-            {photoUri ? "Kunan ulit" : "Kunan ng larawan"}
+            {photoUri ? "Retake" : "Take photo"}
           </Text>
         </Pressable>
       </View>
 
       {/* Label picker */}
       <View style={styles.labelSection}>
-        <Text style={styles.labelTitle}>Kategorya (optional)</Text>
+        <Text style={styles.labelTitle}>Category (optional)</Text>
         <View style={styles.labelGrid}>
           {DRAIN_LABELS.map((label) => (
             <Pressable
@@ -130,7 +130,7 @@ export default function ReportDrainScreen() {
       {/* Submit */}
       <View style={styles.footer}>
         <Pressable style={styles.submitButton} onPress={handleSubmit}>
-          <Text style={styles.submitText}>I-submit ang Report</Text>
+          <Text style={styles.submitText}>Submit Report</Text>
         </Pressable>
       </View>
     </SafeAreaView>
