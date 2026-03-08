@@ -1,59 +1,10 @@
 import { Link } from "expo-router";
-import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Screen } from "@/src/components/screen";
 import { tokens } from "@/src/design/tokens";
 import { useCenters } from "@/src/features/centers/use-centers";
 import { useUserLocation } from "@/src/features/map/use-user-location";
-
-const HOTLINE_SECTIONS: {
-  heading: string;
-  lines: { label: string; number: string }[];
-}[] = [
-  {
-    heading: "National Emergency",
-    lines: [
-      { label: "National Emergency Hotline", number: "911" },
-      { label: "Philippine National Police (PNP)", number: "117" },
-      { label: "Philippine Red Cross", number: "143" },
-      { label: "MMDA Traffic Emergency", number: "136" },
-    ],
-  },
-  {
-    heading: "Police and Safety",
-    lines: [
-      { label: "PNP Direct Line", number: "(02) 8722-0650" },
-      { label: "PNP Text Hotline", number: "0917-847-5757" },
-    ],
-  },
-  {
-    heading: "Fire",
-    lines: [
-      { label: "Bureau of Fire Protection", number: "(02) 8426-0219" },
-      { label: "Bureau of Fire Protection", number: "(02) 8426-0246" },
-    ],
-  },
-  {
-    heading: "Disaster Response",
-    lines: [
-      { label: "NDRRMC", number: "(02) 8911-1406" },
-      { label: "NDRRMC", number: "(02) 8912-2665" },
-      { label: "NDRRMC", number: "(02) 8912-5668" },
-      { label: "NDRRMC", number: "(02) 8911-1873" },
-    ],
-  },
-  {
-    heading: "Medical / Rescue",
-    lines: [
-      { label: "Philippine Red Cross", number: "143" },
-      { label: "Philippine Red Cross", number: "(02) 8527-0000" },
-    ],
-  },
-  {
-    heading: "Weather",
-    lines: [{ label: "PAGASA", number: "(02) 8284-0800" }],
-  },
-];
 
 export default function CentersScreen() {
   const { location } = useUserLocation();
@@ -105,28 +56,6 @@ export default function CentersScreen() {
           </Link>
         </View>
       ))}
-
-      <View style={styles.card}>
-        <Text style={styles.title}>Important hotlines</Text>
-        {HOTLINE_SECTIONS.map((section) => (
-          <View key={section.heading} style={styles.hotlineSection}>
-            <Text style={styles.hotlineHeading}>{section.heading}</Text>
-            {section.lines.map((line, i) => (
-              <Pressable
-                key={`${section.heading}-${i}`}
-                style={styles.hotlineRow}
-                onPress={() => {
-                  const tel = line.number.replace(/[^0-9+]/g, "");
-                  void Linking.openURL(`tel:${tel}`);
-                }}
-              >
-                <Text style={styles.body}>{line.label}</Text>
-                <Text style={styles.hotlineNumber}>{line.number}</Text>
-              </Pressable>
-            ))}
-          </View>
-        ))}
-      </View>
 
       <View style={styles.card}>
         <Text style={styles.title}>Important MVP guardrail</Text>
@@ -210,25 +139,5 @@ const styles = StyleSheet.create({
   link: {
     color: tokens.colors.ctaPrimary,
     fontSize: tokens.type.body,
-  },
-  hotlineSection: {
-    gap: 4,
-  },
-  hotlineHeading: {
-    color: tokens.colors.textPrimary,
-    fontSize: 13,
-    fontWeight: "700",
-    marginTop: 4,
-  },
-  hotlineRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 4,
-  },
-  hotlineNumber: {
-    color: tokens.colors.ctaPrimary,
-    fontSize: tokens.type.body,
-    fontWeight: "600",
   },
 });

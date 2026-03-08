@@ -50,6 +50,15 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="actions"
+        options={{
+          title: "Actions",
+          tabBarIcon: ({ color }) => (
+            <Ionicons size={22} name="shield-checkmark" color={color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }
