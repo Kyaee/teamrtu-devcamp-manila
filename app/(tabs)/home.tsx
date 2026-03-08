@@ -50,7 +50,7 @@ import type { PlaceLocation } from "@/src/services/places";
 import { useAppSlice } from "@/src/store/app-slice";
 import { useChecklistStore } from "@/src/store/checklist-store";
 import { useReloadApp } from "@/src/store/reload-context";
-import type { FloodReport, ReportDepth } from "@/src/types/domain";
+import type { EvacCenter, FloodReport, ReportDepth } from "@/src/types/domain";
 import type { HourlyForecastEntry } from "@/src/types/weather";
 
 const DEPTH_COLORS: Record<ReportDepth, string> = {
@@ -198,6 +198,7 @@ export default function HomeScreen() {
   const [direActive, setDireActive] = useState(false);
   const [selectedFloodReport, setSelectedFloodReport] =
     useState<FloodReport | null>(null);
+  const [selectedCenter, setSelectedCenter] = useState<EvacCenter | null>(null);
 
   const { latestAssessment } = useAppSlice();
   const { mergeAiChecklist } = usePreparedness();
@@ -252,6 +253,7 @@ export default function HomeScreen() {
       if (marker.category === "dpwh") {
         setSelectedDpwhId(marker.id);
         setSelectedFloodReport(null);
+        setSelectedCenter(null);
         mapRef.current?.animateToRegion(
           {
             latitude: marker.latitude,
@@ -268,6 +270,7 @@ export default function HomeScreen() {
         if (report) {
           setSelectedFloodReport(report);
           setSelectedDpwhId(null);
+          setSelectedCenter(null);
           mapRef.current?.animateToRegion(
             {
               latitude: marker.latitude,
@@ -278,11 +281,28 @@ export default function HomeScreen() {
             500,
           );
         }
+      } else if (marker.category === "center") {
+        const center = centers.find((c) => c.id === marker.id);
+        if (center) {
+          setSelectedCenter(center);
+          setSelectedFloodReport(null);
+          setSelectedDpwhId(null);
+          mapRef.current?.animateToRegion(
+            {
+              latitude: marker.latitude,
+              longitude: marker.longitude,
+              latitudeDelta: 0.006,
+              longitudeDelta: 0.006,
+            },
+            500,
+          );
+        }
       } else {
         setSelectedFloodReport(null);
+        setSelectedCenter(null);
       }
     },
-    [floodReports],
+    [floodReports, centers],
   );
 
   const handleZonePress = useCallback((zone: MapZone) => {
@@ -710,6 +730,47 @@ export default function HomeScreen() {
               {selectedFloodReport.lat.toFixed(4)},{" "}
               {selectedFloodReport.lng.toFixed(4)}
             </Text>
+          </View>
+        ) : null}
+
+        {selectedCenter ? (
+          <View style={styles.centerPopup}>
+            <View style={styles.centerPopupHeader}>
+              <View style={styles.centerPopupBadge}>
+                <Text style={styles.centerPopupBadgeText}>
+                  {selectedCenter.status === "open" ? "OPEN" : "LIMITED"}
+                </Text>
+              </View>
+              <Text style={styles.centerPopupTitle} numberOfLines={1}>
+                {selectedCenter.name}
+              </Text>
+              <Pressable onPress={() => setSelectedCenter(null)} hitSlop={12}>
+                <Text style={styles.centerPopupClose}>{"\u2715"}</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.centerPopupDistance}>
+              {selectedCenter.distanceKm} km away \u2014{" "}
+              {selectedCenter.barangay}
+            </Text>
+            {selectedCenter.uncertaintyNote ? (
+              <Text style={styles.centerPopupNote}>
+                {selectedCenter.uncertaintyNote}
+              </Text>
+            ) : null}
+            <Pressable
+              style={styles.centerNavButton}
+              onPress={() => {
+                setSelectedCenter(null);
+                router.push({
+                  pathname: "/navigate",
+                  params: { centerId: selectedCenter.id },
+                });
+              }}
+            >
+              <Text style={styles.centerNavButtonText}>
+                Navigate to Shelter
+              </Text>
+            </Pressable>
           </View>
         ) : null}
       </SafeAreaView>
@@ -1322,6 +1383,66 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: tokens.colors.textSecondary,
     fontFamily: "monospace",
+  },
+  centerPopup: {
+    marginTop: 6,
+    backgroundColor: "rgba(255,255,255,0.95)",
+    borderRadius: tokens.radius.lg,
+    borderLeftWidth: 4,
+    borderLeftColor: tokens.colors.safe,
+    borderWidth: 1,
+    borderColor: tokens.colors.border,
+    padding: tokens.spacing.md,
+    gap: 6,
+    boxShadow: "0 2px 12px rgba(0,0,0,0.12)",
+  },
+  centerPopupHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing.sm,
+  },
+  centerPopupBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: tokens.radius.sm,
+    backgroundColor: tokens.colors.safe,
+  },
+  centerPopupBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  centerPopupTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "700",
+    color: tokens.colors.textPrimary,
+  },
+  centerPopupClose: {
+    fontSize: 14,
+    color: tokens.colors.textSecondary,
+    fontWeight: "800",
+  },
+  centerPopupDistance: {
+    fontSize: 13,
+    color: tokens.colors.textSecondary,
+  },
+  centerPopupNote: {
+    fontSize: 12,
+    color: tokens.colors.textDisabled,
+    fontStyle: "italic",
+  },
+  centerNavButton: {
+    marginTop: 4,
+    backgroundColor: tokens.colors.ctaPrimary,
+    borderRadius: tokens.radius.md,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  centerNavButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
   },
   alertPanelInactive: {
     backgroundColor: "rgba(255,255,255,0.92)",
