@@ -88,6 +88,7 @@ export default function NavigateScreen() {
       setAutoStarted(true);
       void nav.start();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [destination, autoStarted, nav.status, nav.start]);
 
   // Center map on user position when it updates

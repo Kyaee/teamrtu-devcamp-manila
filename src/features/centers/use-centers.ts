@@ -71,6 +71,10 @@ export function useCenters(userLat?: number, userLng?: number) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const refresh = () => setRefreshKey((k) => k + 1);
+
   const lat = userLat ?? 14.6308;
   const lng = userLng ?? 121.1023;
 
@@ -122,7 +126,7 @@ export function useCenters(userLat?: number, userLng?: number) {
     return () => {
       cancelled = true;
     };
-  }, [lat, lng]);
+  }, [lat, lng, userLat, userLng, refreshKey]);
 
   const centers = useMemo<EvacCenter[]>(() => {
     if (!openOnly) return allCenters;
@@ -135,5 +139,6 @@ export function useCenters(userLat?: number, userLng?: number) {
     setOpenOnly,
     loading,
     error,
+    refresh,
   };
 }

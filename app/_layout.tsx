@@ -6,6 +6,7 @@ import "react-native-reanimated";
 
 import { tokens } from "@/src/design/tokens";
 import { AppSliceProvider } from "@/src/store/app-slice";
+import { ChecklistStoreProvider } from "@/src/store/checklist-store";
 
 export const unstable_settings = {
   anchor: "(tabs)",
@@ -27,44 +28,53 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AppSliceProvider>
-        <ThemeProvider value={navigationTheme}>
-          <Stack
-            screenOptions={{
-              headerStyle: { backgroundColor: tokens.colors.background },
-              headerTintColor: tokens.colors.textPrimary,
-            }}
-          >
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen
-              name="alert/[id]"
-              options={{ title: "Alert Detail" }}
-            />
-            <Stack.Screen
-              name="center/[id]"
-              options={{ title: "Center Detail" }}
-            />
-            <Stack.Screen
-              name="settings/index"
-              options={{ title: "Settings" }}
-            />
-            <Stack.Screen
-              name="relief/index"
-              options={{ title: "Relief (MVP-gated)" }}
-            />
-            <Stack.Screen
-              name="donation/index"
-              options={{ title: "Donation (MVP-gated)" }}
-            />
-            <Stack.Screen
-              name="report-drain/index"
-              options={{
-                title: "Report: Baradong Kanal",
-                presentation: "modal",
+        <ChecklistStoreProvider>
+          <ThemeProvider value={navigationTheme}>
+            <Stack
+              screenOptions={{
+                headerStyle: { backgroundColor: tokens.colors.background },
+                headerTintColor: tokens.colors.textPrimary,
               }}
-            />
-          </Stack>
-          <StatusBar style="dark" />
-        </ThemeProvider>
+            >
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="alert/[id]"
+                options={{ title: "Alert Detail" }}
+              />
+              <Stack.Screen
+                name="center/[id]"
+                options={{ title: "Center Detail" }}
+              />
+              <Stack.Screen
+                name="settings/index"
+                options={{ title: "Settings" }}
+              />
+              <Stack.Screen
+                name="relief/index"
+                options={{ title: "Relief (MVP-gated)" }}
+              />
+              <Stack.Screen
+                name="donation/index"
+                options={{ title: "Donation (MVP-gated)" }}
+              />
+              <Stack.Screen
+                name="report-drain/index"
+                options={{
+                  title: "Report: Baradong Kanal",
+                  presentation: "modal",
+                }}
+              />
+              <Stack.Screen
+                name="request-help/index"
+                options={{
+                  headerShown: false,
+                  animation: "slide_from_bottom",
+                }}
+              />
+            </Stack>
+            <StatusBar style="dark" />
+          </ThemeProvider>
+        </ChecklistStoreProvider>
       </AppSliceProvider>
     </GestureHandlerRootView>
   );

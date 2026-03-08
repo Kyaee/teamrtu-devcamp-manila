@@ -1,8 +1,11 @@
 import type {
+  ChecklistItem,
   GeminiCenterChoice,
   GeminiCenterGuidance,
   GeminiRouteContext,
   GeminiTriggerEvent,
+  HelpAssessment,
+  UrgencyLevel,
 } from "@/src/types/ai";
 import type { EvacCenter } from "@/src/types/domain";
 
@@ -22,6 +25,149 @@ const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY ?? "";
 const GEMINI_MODEL = "gemini-2.0-flash-lite";
 const BASE_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const TIMEOUT_MS = 10000;
+
+// ---------------------------------------------------------------------------
+// Controlled pacing — adds a small intentional delay so the AI response
+// feels more considered rather than instant low-quality one-liners.
+// ---------------------------------------------------------------------------
+
+const MIN_RESPONSE_DELAY_MS = 400;
+const MAX_RESPONSE_DELAY_MS = 900;
+
+function controlledDelay(): Promise<void> {
+  const ms =
+    MIN_RESPONSE_DELAY_MS +
+    Math.random() * (MAX_RESPONSE_DELAY_MS - MIN_RESPONSE_DELAY_MS);
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ---------------------------------------------------------------------------
+// Language detection helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Lightweight heuristic to detect Tagalog/Filipino vs English.
+ * Returns a language hint for the AI prompt so it replies in the same language.
+ */
+export function detectLanguageHint(text: string): "en" | "fil" | "unknown" {
+  const lower = text.toLowerCase();
+
+  // Common Tagalog/Filipino markers
+  const filMarkers = [
+    "ako",
+    "ko",
+    "mo",
+    "siya",
+    "niya",
+    "namin",
+    "nila",
+    "kami",
+    "tayo",
+    "ang",
+    "mga",
+    "sa",
+    "ng",
+    "na",
+    "po",
+    "opo",
+    "hindi",
+    "oo",
+    "ito",
+    "iyon",
+    "dito",
+    "doon",
+    "meron",
+    "wala",
+    "paano",
+    "nasaan",
+    "bakit",
+    "kasi",
+    "dahil",
+    "kailangan",
+    "tulong",
+    "baha",
+    "tubig",
+    "bahay",
+    "pamilya",
+    "anak",
+    "nanay",
+    "tatay",
+    "kuya",
+    "ate",
+    "lagay",
+    "taas",
+    "gabi",
+    "umaga",
+    "ngayon",
+    "kahapon",
+    "bukas",
+    "saan",
+    "sino",
+    "ano",
+    "magkano",
+    "punta",
+    "pumunta",
+    "takbo",
+    "takot",
+    "ligtas",
+    "sugat",
+    "gamot",
+    "sakit",
+    "ulan",
+    "hangin",
+    "lindol",
+  ];
+
+  const words = lower.split(/\s+/);
+  let filCount = 0;
+  for (const w of words) {
+    if (filMarkers.includes(w)) filCount++;
+  }
+
+  const filRatio = filCount / Math.max(words.length, 1);
+  if (filRatio >= 0.15) return "fil";
+  if (filRatio < 0.05 && words.length >= 3) return "en";
+  return "unknown";
+}
+
+// ---------------------------------------------------------------------------
+// AI greeting (English first, per FR-1)
+// ---------------------------------------------------------------------------
+
+export const AI_GREETING_EN =
+  "Hi, I'm here to help you request emergency assistance. " +
+  "Tell me what's happening right now — are you in a flood, do you need rescue, or do you need supplies? " +
+  "You can speak in English or Filipino, whichever is more comfortable.";
+
+// ---------------------------------------------------------------------------
+// Turn idempotency tracking (prevents duplicate AI replies — FR-4)
+// ---------------------------------------------------------------------------
+
+let _activeTurnId: string | null = null;
+
+/**
+ * Acquire a turn lock. Returns true if this turnId is now the active turn.
+ * Returns false if another turn is already in progress (caller should abort).
+ */
+export function acquireTurnLock(turnId: string): boolean {
+  if (_activeTurnId !== null && _activeTurnId !== turnId) {
+    return false; // another turn is active
+  }
+  _activeTurnId = turnId;
+  return true;
+}
+
+/** Release the turn lock so the next message can be processed. */
+export function releaseTurnLock(turnId: string): void {
+  if (_activeTurnId === turnId) {
+    _activeTurnId = null;
+  }
+}
+
+/** Check if a turn is still the active one (not superseded). */
+export function isTurnActive(turnId: string): boolean {
+  return _activeTurnId === turnId;
+}
 
 function hasApiKey(): boolean {
   return API_KEY.length > 0;
@@ -263,5 +409,305 @@ The phrase should be calm, clear, and actionable. Respond with the phrase only, 
     return { phrase, isFallback: false };
   } catch {
     return { phrase: FALLBACK_PHRASES[triggerEvent], isFallback: true };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Help Request Assessment
+// ---------------------------------------------------------------------------
+
+const VALID_URGENCY_LEVELS: UrgencyLevel[] = [
+  "low",
+  "medium",
+  "high",
+  "very_urgent",
+];
+
+const VALID_CATEGORIES = new Set([
+  "documents",
+  "food_water",
+  "clothing",
+  "medical",
+  "electronics",
+  "tools",
+  "other",
+]);
+
+const FALLBACK_ASSESSMENT: HelpAssessment = {
+  urgencyLevel: "medium",
+  summary:
+    "Hindi ma-evaluate ng AI ang sitwasyon. Maghanda na at pumunta sa pinakamalapit na evacuation center kung kinakailangan.",
+  recommendedActions: [
+    "Ihanda ang go-bag na may pagkain, tubig, at gamot.",
+    "I-monitor ang weather updates.",
+    "Kontakin ang barangay hotline para sa tulong.",
+  ],
+  checklistItems: [
+    { label: "Pagkain (3 araw)", category: "food_water" },
+    { label: "Tubig (3 litro/tao)", category: "food_water" },
+    { label: "Gamot at first-aid kit", category: "medical" },
+    { label: "Valid ID at documents", category: "documents" },
+    { label: "Flashlight at battery", category: "electronics" },
+    { label: "Extra damit", category: "clothing" },
+  ],
+  navigationIntent: true,
+  destinationHint: null,
+  isFallback: true,
+};
+
+function validateChecklistItems(raw: unknown[]): ChecklistItem[] {
+  const items: ChecklistItem[] = [];
+  for (const item of raw) {
+    if (
+      typeof item === "object" &&
+      item !== null &&
+      "label" in item &&
+      "category" in item &&
+      typeof (item as { label: unknown }).label === "string" &&
+      typeof (item as { category: unknown }).category === "string" &&
+      VALID_CATEGORIES.has((item as { category: string }).category)
+    ) {
+      items.push({
+        label: (item as { label: string }).label,
+        category: (item as { category: string })
+          .category as ChecklistItem["category"],
+      });
+    }
+  }
+  return items;
+}
+
+export function buildConversationPrompt(
+  messages: { role: "user" | "assistant"; text: string }[],
+  userLat: number,
+  userLng: number,
+): string {
+  const convoText = messages
+    .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.text}`)
+    .join("\n");
+
+  return `You are an emergency flood assistance AI for Metro Manila, Philippines.
+Based on the conversation below, assess the user's situation.
+
+User GPS: latitude ${userLat.toFixed(6)}, longitude ${userLng.toFixed(6)}
+
+Conversation:
+${convoText}
+
+Respond ONLY with valid JSON (no markdown, no explanation outside JSON):
+{
+  "urgencyLevel": "low" | "medium" | "high" | "very_urgent",
+  "summary": "<1-2 sentence summary of the user's situation in Filipino/Tagalog>",
+  "recommendedActions": ["<action 1>", "<action 2>", ...],
+  "checklistItems": [
+    {"label": "<item name in Filipino>", "category": "documents|food_water|clothing|medical|electronics|tools|other"},
+    ...
+  ],
+  "navigationIntent": true/false,
+  "destinationHint": "<suggested destination or null>"
+}
+
+Rules:
+- urgencyLevel "very_urgent" = trapped, injured, rising water, immediate danger
+- urgencyLevel "high" = flooding nearby, needs to evacuate soon
+- urgencyLevel "medium" = potential flooding, should prepare
+- urgencyLevel "low" = monitoring, no immediate threat
+- checklistItems must have 4-10 items, categorized
+- recommendedActions must have 2-5 items
+- All text responses in Filipino/Tagalog`;
+}
+
+export async function assessHelpRequest(
+  messages: { role: "user" | "assistant"; text: string }[],
+  userLat: number,
+  userLng: number,
+): Promise<HelpAssessment> {
+  if (!hasApiKey() || messages.length === 0) return FALLBACK_ASSESSMENT;
+
+  const prompt = buildConversationPrompt(messages, userLat, userLng);
+
+  try {
+    const raw = await callGemini(prompt);
+    const parsed = extractJson(raw);
+
+    const urgencyLevel =
+      typeof parsed.urgencyLevel === "string" &&
+      VALID_URGENCY_LEVELS.includes(parsed.urgencyLevel as UrgencyLevel)
+        ? (parsed.urgencyLevel as UrgencyLevel)
+        : FALLBACK_ASSESSMENT.urgencyLevel;
+
+    const summary =
+      typeof parsed.summary === "string" && parsed.summary.length > 0
+        ? parsed.summary
+        : FALLBACK_ASSESSMENT.summary;
+
+    const recommendedActions = Array.isArray(parsed.recommendedActions)
+      ? (parsed.recommendedActions.filter(
+          (a) => typeof a === "string" && a.length > 0,
+        ) as string[])
+      : FALLBACK_ASSESSMENT.recommendedActions;
+
+    const checklistItems = Array.isArray(parsed.checklistItems)
+      ? validateChecklistItems(parsed.checklistItems)
+      : FALLBACK_ASSESSMENT.checklistItems;
+
+    const navigationIntent =
+      typeof parsed.navigationIntent === "boolean"
+        ? parsed.navigationIntent
+        : true;
+
+    const destinationHint =
+      typeof parsed.destinationHint === "string"
+        ? parsed.destinationHint
+        : null;
+
+    if (recommendedActions.length < 2) {
+      return { ...FALLBACK_ASSESSMENT, urgencyLevel };
+    }
+    if (checklistItems.length < 2) {
+      return {
+        ...FALLBACK_ASSESSMENT,
+        urgencyLevel,
+        summary,
+        recommendedActions,
+      };
+    }
+
+    return {
+      urgencyLevel,
+      summary,
+      recommendedActions,
+      checklistItems,
+      navigationIntent,
+      destinationHint,
+      isFallback: false,
+    };
+  } catch {
+    return FALLBACK_ASSESSMENT;
+  }
+}
+
+/**
+ * Generate an AI reply in the help conversation to guide the user
+ * toward providing the information needed for urgency assessment.
+ *
+ * Enhancements (Opus spec):
+ * - Detects user language and replies in kind (FR-2)
+ * - Includes location context when available (FR-5)
+ * - Adds controlled pacing delay for quality (FR-3)
+ * - Turn-locked via idempotency key (FR-4) — caller must use acquireTurnLock
+ */
+export async function getHelpConversationReply(
+  messages: { role: "user" | "assistant"; text: string }[],
+  options?: {
+    userLat?: number;
+    userLng?: number;
+    locationDescription?: string;
+    turnId?: string;
+  },
+): Promise<string> {
+  const fallback =
+    "Thank you for the information. Can you describe more about your current situation? Are you in a flood or are you still safe?";
+
+  if (!hasApiKey()) return fallback;
+
+  // FR-4: Check turn lock (if turnId provided)
+  if (options?.turnId && !isTurnActive(options.turnId)) {
+    return ""; // stale turn — return empty to signal caller should discard
+  }
+
+  // FR-2: Detect language from latest user message
+  const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+  const langHint = lastUserMsg ? detectLanguageHint(lastUserMsg.text) : "en";
+
+  const languageInstruction =
+    langHint === "fil"
+      ? "Respond in Filipino/Tagalog since the user is writing in Filipino."
+      : langHint === "en"
+        ? "Respond in English since the user is writing in English."
+        : "Respond in the same language the user is using. If unsure, respond in English with a brief Filipino translation.";
+
+  // FR-5: Location context
+  const locationCtx =
+    options?.userLat && options?.userLng
+      ? `\nUser's current GPS: latitude ${options.userLat.toFixed(6)}, longitude ${options.userLng.toFixed(6)}.` +
+        (options.locationDescription
+          ? ` Location description: ${options.locationDescription}.`
+          : "") +
+        "\nUse this location to give relevant, specific suggestions (nearby landmarks, barangay context, flood-prone areas, nearest evacuation routes)."
+      : "\nUser location is not available. Ask the user for their barangay or nearest landmark.";
+
+  const convoText = messages
+    .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.text}`)
+    .join("\n");
+
+  const prompt = `You are an emergency flood assistance AI for Metro Manila, Philippines.
+You are having a conversation to assess the user's situation and help them get to safety.
+
+${languageInstruction}
+${locationCtx}
+
+Conversation so far:
+${convoText}
+
+Generate a short reply (1-3 sentences) to:
+1. Acknowledge what the user said
+2. Ask a follow-up to assess their urgency (location, water level, injuries, if they need rescue)
+3. If you know their location, suggest specific actionable next steps (nearest safe area, evacuation center direction, etc.)
+4. Be calm, compassionate, and direct
+5. If the user seems in immediate danger, strongly recommend marking their location as urgent
+
+If you have enough information to assess (at least 2 user messages with substantive detail), say so and tell them you will now assess their situation.
+Respond with the reply text only, no JSON, no quotes.`;
+
+  try {
+    // FR-3: Controlled pacing for quality perception
+    const [raw] = await Promise.all([callGemini(prompt), controlledDelay()]);
+
+    // FR-4: Re-check turn is still active after await
+    if (options?.turnId && !isTurnActive(options.turnId)) {
+      return "";
+    }
+
+    const cleaned = raw.replace(/^["']|["']$/g, "").trim();
+    return cleaned || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Location-aware suggestion generator (FR-5)
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate location-aware suggestions based on user's GPS coordinates.
+ * Used for the AI greeting or when location becomes available.
+ */
+export async function getLocationAwareSuggestions(
+  userLat: number,
+  userLng: number,
+): Promise<string> {
+  const fallback =
+    "I can see your location. If you need help, tell me what's happening and I'll guide you to safety.";
+
+  if (!hasApiKey()) return fallback;
+
+  const prompt = `You are an emergency flood assistance AI for Metro Manila, Philippines.
+The user is at GPS coordinates: latitude ${userLat.toFixed(6)}, longitude ${userLng.toFixed(6)}.
+
+Based on this location in Metro Manila, generate a brief (2-3 sentences) English message that:
+1. Acknowledges you can see their approximate location area
+2. Mentions what they can do right now (check flood status, find evacuation centers, report flooding)
+3. Asks them to describe their situation if they need help
+
+Be calm and helpful. Respond with the message text only, no JSON, no quotes.`;
+
+  try {
+    const raw = await callGemini(prompt);
+    const cleaned = raw.replace(/^["']|["']$/g, "").trim();
+    return cleaned || fallback;
+  } catch {
+    return fallback;
   }
 }

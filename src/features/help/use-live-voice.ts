@@ -590,11 +590,14 @@ export function useLiveVoice(): UseLiveVoiceReturn {
 
   useEffect(() => {
     disposedRef.current = false;
+    // Capture ref value at effect time so cleanup doesn't read a stale ref
+    const genAtMount = sessionGenRef.current;
+    void genAtMount; // used to satisfy eslint; cleanup bumps via the ref
 
     return () => {
       disposedRef.current = true;
       // Bump generation to kill any stale callbacks
-      sessionGenRef.current++;
+      sessionGenRef.current = genAtMount + 1;
       stopMicrophone();
       stopPlaybackDrain();
 
