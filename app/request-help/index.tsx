@@ -636,13 +636,13 @@ export default function RequestHelpScreen() {
     sendMessage,
     runAssessment,
     hasEnoughMessages,
-  } = useHelpAssessment(location.latitude, location.longitude);
+  } = useHelpAssessment(location?.latitude, location?.longitude);
   const { addUrgentMarker, sending: urgentSending } = useUrgentMarkers();
 
   // Centers data — reuse existing hook
   const { centers, loading: centersLoading } = useCenters(
-    location.latitude,
-    location.longitude,
+    location?.latitude,
+    location?.longitude,
   );
 
   // Voice mode
@@ -745,7 +745,7 @@ export default function RequestHelpScreen() {
 
   // FR-6: Urgent-to-save purple marker with explicit confirmation
   const handleMarkUrgent = useCallback(() => {
-    if (!assessment) return;
+    if (!assessment || !location) return;
     Alert.alert(
       "Confirm Urgent to Save",
       "This will place a PURPLE marker on the map visible to all responders at your current location. Are you sure?",
