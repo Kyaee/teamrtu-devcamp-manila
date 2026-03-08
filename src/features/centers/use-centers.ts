@@ -71,9 +71,6 @@ export function useCenters(userLat?: number, userLng?: number) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const lat = userLat ?? 14.6308;
-  const lng = userLng ?? 121.1023;
-
   useEffect(() => {
     if (userLat === undefined || userLng === undefined) return;
 
@@ -83,9 +80,15 @@ export function useCenters(userLat?: number, userLng?: number) {
       setLoading(true);
       setError(null);
 
-      // Show cached data immediately if available
+      // Show cached data immediately — but only if it's near the current location
+      // Use a tight radius (2 km) so stale caches from dev/test locations
+      // are discarded when the real GPS position is different.
       const cached = await readJson<EvacCenter[]>(CACHE_KEY, []);
-      if (!cancelled && cached.length > 0) {
+      const cacheIsNearby =
+        cached.length > 0 &&
+        haversineKm(userLat, userLng, cached[0].lat, cached[0].lng) < 2;
+
+      if (!cancelled && cacheIsNearby) {
         setAllCenters(cached);
         setLoading(false);
       }
@@ -94,12 +97,18 @@ export function useCenters(userLat?: number, userLng?: number) {
 
       // Source 1: Google Places Nearby Search (primary — works with just Maps API key)
       try {
+        console.log(
+          `[Centers] Searching shelters near ${userLat}, ${userLng}...`,
+        );
         const places = await searchNearbyShelters(userLat, userLng, 5000);
+        console.log(
+          `[Centers] Found ${places.length} places from Google Places`,
+        );
         for (const p of places) {
           discovered.push(placeToDomain(p, userLat, userLng));
         }
-      } catch {
-        // Places API failed — continue with other sources
+      } catch (err: any) {
+        console.warn(`[Centers] Places search failed:`, err?.message ?? err);
       }
 
       if (!cancelled) {
@@ -109,7 +118,7 @@ export function useCenters(userLat?: number, userLng?: number) {
           setAllCenters(sorted);
           setError(null);
           await writeJson(CACHE_KEY, sorted);
-        } else if (cached.length === 0) {
+        } else if (!cacheIsNearby) {
           setError(
             "Hindi mahanap ang mga evacuation center. I-check ang internet connection.",
           );
@@ -122,7 +131,7 @@ export function useCenters(userLat?: number, userLng?: number) {
     return () => {
       cancelled = true;
     };
-  }, [lat, lng]);
+  }, [userLat, userLng]);
 
   const centers = useMemo<EvacCenter[]>(() => {
     if (!openOnly) return allCenters;

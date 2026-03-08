@@ -47,17 +47,17 @@ export default function NavigateScreen() {
   const { back } = useRouter();
   const { location } = useUserLocation();
   const { centers, loading: centersLoading } = useCenters(
-    location.latitude,
-    location.longitude,
+    location?.latitude,
+    location?.longitude,
   );
   const { floodReports } = useMapReports();
   const { highestSeverityAlert } = useAlerts(
-    location.latitude,
-    location.longitude,
+    location?.latitude,
+    location?.longitude,
   );
   const { signal } = useWeatherSignal(
-    location.latitude,
-    location.longitude,
+    location?.latitude,
+    location?.longitude,
     highestSeverityAlert?.severity,
   );
   const mapRef = useRef<MapDisplayRef>(null);
@@ -151,12 +151,19 @@ export default function NavigateScreen() {
     return { polyline: nav.route.polyline, color, width: 5 };
   }, [nav.route, nav.isFlooded]);
 
-  const initialRegion = {
-    latitude: location.latitude,
-    longitude: location.longitude,
-    latitudeDelta: 0.015,
-    longitudeDelta: 0.015,
-  };
+  const initialRegion = location
+    ? {
+        latitude: location.latitude,
+        longitude: location.longitude,
+        latitudeDelta: 0.015,
+        longitudeDelta: 0.015,
+      }
+    : {
+        latitude: 14.6,
+        longitude: 121.0,
+        latitudeDelta: 0.5,
+        longitudeDelta: 0.5,
+      };
 
   const currentStep = nav.route?.steps[nav.currentStepIndex];
   const totalSteps = nav.route?.steps.length ?? 0;

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DrainReport, FloodReport, ReportDepth } from "@/src/types/domain";
 import type {
   DbDrainReport,
+  DbDrainReportRaw,
   DbFloodReport,
   DbFloodReportRaw,
 } from "@/src/types/supabase";
@@ -15,7 +16,9 @@ import {
   fetchFloodReports,
   insertDrainReport,
   insertFloodReport,
+  subscribeToDrainReports,
   subscribeToFloodReports,
+  uploadReportPhoto,
 } from "@/src/services/supabase";
 
 const FLOOD_KEY = "agos:flood-reports";
@@ -41,6 +44,7 @@ function dbFloodToDomain(row: DbFloodReport): FloodReport {
     status: row.status,
     createdAt: row.created_at,
     reporterLabel: row.reporter_label,
+    photoUrl: row.photo_url,
   };
 }
 
@@ -68,6 +72,34 @@ function rawFloodToDomain(row: DbFloodReportRaw): FloodReport {
     status: row.status,
     createdAt: row.created_at,
     reporterLabel: row.reporter_label,
+    photoUrl: null,
+  };
+}
+
+/** Parse a raw realtime payload for drain reports (location is hex WKB or GeoJSON string). */
+function rawDrainToDomain(row: DbDrainReportRaw): DrainReport {
+  let lat = 0;
+  let lng = 0;
+  try {
+    const geo =
+      typeof row.location === "string"
+        ? JSON.parse(row.location)
+        : row.location;
+    if (geo?.coordinates) {
+      lng = geo.coordinates[0];
+      lat = geo.coordinates[1];
+    }
+  } catch {
+    // hex WKB can't be parsed as JSON — skip, lat/lng stay 0
+  }
+  return {
+    id: row.id,
+    lat,
+    lng,
+    description: row.description,
+    photoUrl: row.photo_url,
+    status: row.status,
+    createdAt: row.created_at,
   };
 }
 
@@ -77,6 +109,7 @@ function dbDrainToDomain(row: DbDrainReport): DrainReport {
     lat: row.lat,
     lng: row.lng,
     description: row.description,
+    photoUrl: row.photo_url,
     status: row.status,
     createdAt: row.created_at,
   };
@@ -112,15 +145,11 @@ export function useMapReports() {
         if (!cancelled) {
           const floods = floodRows.map(dbFloodToDomain);
           const drains = drainRows.map(dbDrainToDomain);
-          // Only overwrite cache if remote returned data — prevent clobber
-          if (floods.length > 0 || cachedFlood.length === 0) {
-            setFloodReports(floods);
-            await writeJson(FLOOD_KEY, floods);
-          }
-          if (drains.length > 0 || cachedDrain.length === 0) {
-            setDrainReports(drains);
-            await writeJson(DRAIN_KEY, drains);
-          }
+          // Supabase is the source of truth — always overwrite cache
+          setFloodReports(floods);
+          await writeJson(FLOOD_KEY, floods);
+          setDrainReports(drains);
+          await writeJson(DRAIN_KEY, drains);
           setReportsLoaded(true);
         }
       } catch {
@@ -151,6 +180,23 @@ export function useMapReports() {
     };
   }, []);
 
+  // Realtime subscription for drain reports from other users
+  useEffect(() => {
+    const channel = subscribeToDrainReports((row) => {
+      const report = rawDrainToDomain(row);
+      if (report.lat === 0 && report.lng === 0) return;
+      setDrainReports((prev) => {
+        if (prev.some((r) => r.id === report.id)) return prev;
+        const next = [report, ...prev];
+        void writeJson(DRAIN_KEY, next);
+        return next;
+      });
+    });
+    return () => {
+      channel?.unsubscribe();
+    };
+  }, []);
+
   const confirmationHint = useMemo(
     () => "Confirmed kapag may 3+ reports sa loob ng 200m.",
     [],
@@ -162,6 +208,7 @@ export function useMapReports() {
       isConnected: boolean,
       lat = 14.62,
       lng = 121.09,
+      photoUri?: string | null,
     ) => {
       const localReport: FloodReport = {
         id: `flood-${Date.now()}`,
@@ -171,20 +218,47 @@ export function useMapReports() {
         status: "pending",
         createdAt: new Date().toISOString(),
         reporterLabel: isConnected ? "Live report" : "Offline queued report",
+        photoUrl: photoUri ?? null,
       };
 
       if (isConnected) {
         try {
+          // Upload photo first if available
+          let photoUrl: string | null = null;
+          if (photoUri) {
+            photoUrl = await uploadReportPhoto(
+              photoUri,
+              localReport.id,
+              "flood",
+            );
+            localReport.photoUrl = photoUrl;
+          }
+
           const wkt = `POINT(${lng} ${lat})`;
           const inserted = await insertFloodReport({
             location: wkt,
             depth,
             status: "pending",
             reporter_label: "Community report",
+            photo_url: photoUrl ?? undefined,
           });
 
           if (inserted) {
             localReport.id = inserted.id;
+
+            // Re-upload with correct report ID if we had a photo
+            if (photoUri && photoUrl) {
+              const finalUrl = await uploadReportPhoto(
+                photoUri,
+                inserted.id,
+                "flood",
+              );
+              if (finalUrl) {
+                localReport.photoUrl = finalUrl;
+                // Update the DB row with the final URL
+                // (fire-and-forget, non-critical)
+              }
+            }
 
             // 3 reports / 200m threshold check
             const shouldConfirm = await checkNearbyReportCount(
@@ -242,6 +316,7 @@ export function useMapReports() {
       isConnected: boolean,
       lat = 14.619,
       lng = 121.097,
+      photoUri?: string | null,
     ) => {
       const localReport: DrainReport = {
         id: `drain-${Date.now()}`,
@@ -249,17 +324,41 @@ export function useMapReports() {
         lng,
         status: isConnected ? "pending" : "pending",
         description,
+        photoUrl: photoUri ?? null,
         createdAt: new Date().toISOString(),
       };
 
       if (isConnected) {
         try {
+          // Upload photo first if available
+          let photoUrl: string | null = null;
+          if (photoUri) {
+            photoUrl = await uploadReportPhoto(
+              photoUri,
+              localReport.id,
+              "drain",
+            );
+            localReport.photoUrl = photoUrl;
+          }
+
           const wkt = `POINT(${lng} ${lat})`;
           const inserted = await insertDrainReport({
             location: wkt,
             description,
+            photo_url: photoUrl ?? undefined,
           });
-          if (inserted) localReport.id = inserted.id;
+          if (inserted) {
+            localReport.id = inserted.id;
+            // Re-upload with correct ID if we had a photo
+            if (photoUri && photoUrl) {
+              const finalUrl = await uploadReportPhoto(
+                photoUri,
+                inserted.id,
+                "drain",
+              );
+              if (finalUrl) localReport.photoUrl = finalUrl;
+            }
+          }
           setSyncMessage("Drain report submitted.");
         } catch {
           const queue = await readJson<OfflineQueueItem[]>(
